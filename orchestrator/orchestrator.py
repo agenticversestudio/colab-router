@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - Multi-Account Autonomous 24/7 Cloud Orchestrator Daemon
+Colab Router - Multi-Account Autonomous 24/7 Cloud Orchestrator Daemon
 ======================================================================
 Production-Grade Orchestrator for Local Machines, VPS, Koyeb, Render, or Docker.
 
@@ -51,7 +51,7 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger("GDQOrchestrator")
+logger = logging.getLogger("ColabRouterOrchestrator")
 
 # ----------------- Settings & Accounts -----------------
 _HEALTH_URL_DEFAULT = "https://your-domain.ngrok-free.dev/v1/models"
@@ -73,7 +73,7 @@ SHIFT_MAX_HOURS = float(os.environ.get("SHIFT_MAX_HOURS", 3.5))
 HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", 30))
 CONSECUTIVE_FAILURES_LIMIT = int(os.environ.get("CONSECUTIVE_FAILURES_LIMIT", 5))
 PORT = int(os.environ.get("PORT", 8080))
-SESSION_NAME = os.environ.get("COLAB_SESSION_NAME", "gdq_colab_engine")
+SESSION_NAME = os.environ.get("COLAB_SESSION_NAME", "colab_router_engine")
 
 # Load multi-account roster from vault directory or environment
 def discover_accounts():
@@ -134,7 +134,7 @@ class CloudHealthHandler(BaseHTTPRequestHandler):
 
         resp_data = {
             "status": "online",
-            "service": "GDQ Colab Kit Sovereign Orchestrator",
+            "service": "Colab Router Orchestrator",
             "engine": state.get("status", "running"),
             "current_shift": account_name,
             "shift_elapsed_hours": round(elapsed_hrs, 2),
@@ -157,7 +157,7 @@ def start_cloud_http_server():
     server.serve_forever()
 
 # ----------------- Orchestrator Core -----------------
-class GDQOrchestrator:
+class ColabRouterOrchestrator:
     def __init__(self):
         self.state = load_state()
 
@@ -325,7 +325,7 @@ class GDQOrchestrator:
         self.launch_shift(next_index)
 
     def run(self):
-        logger.info("🌌 GDQ Colab Autonomous Orchestrator Started")
+        logger.info("🌌 Colab Router Autonomous Orchestrator Started")
 
         if self.probe_health():
             logger.info("[✓] Gateway is already active and healthy!")
@@ -385,5 +385,5 @@ if __name__ == "__main__":
     http_thread = threading.Thread(target=start_cloud_http_server, daemon=True)
     http_thread.start()
 
-    orchestrator = GDQOrchestrator()
+    orchestrator = ColabRouterOrchestrator()
     orchestrator.run()

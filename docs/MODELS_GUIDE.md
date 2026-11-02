@@ -1,4 +1,4 @@
-# 🧠 Supported Models & VRAM Sizing Guide
+﻿# 🧠 Supported Models & VRAM Sizing Guide
 
 This guide lists verified GGUF models optimized for Google Colab runtimes.
 
@@ -39,7 +39,7 @@ To achieve **100% GPU offload (zero CPU bottleneck)**, the combined weight of mo
 
 ---
 
-## How to Switch Models in GDQ Colab Kit
+## How to Switch Models in Colab Router
 
 Simply modify the three model variables in your `.env` or in `colab/notebook.ipynb`:
 

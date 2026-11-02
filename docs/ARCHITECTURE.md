@@ -1,6 +1,6 @@
-# 🏛️ Architecture Specification & Technical Mechanics
+﻿# 🏛️ Architecture Specification & Technical Mechanics
 
-**GDQ Colab Kit** transforms Google Colab into a high-availability, sovereign, OpenAI-compatible AI supercomputer. This document explains the underlying engineering design, memory mechanics, and failure mitigations.
+**Colab Router** transforms Google Colab into a high-availability, sovereign, OpenAI-compatible AI supercomputer. This document explains the underlying engineering design, memory mechanics, and failure mitigations.
 
 ---
 
@@ -58,7 +58,7 @@ If context length is expanded to 8,192 or 16,384 on a 27B model, Ollama automati
 - **100% GPU (66/66 layers):** **11.5 - 12.0 tokens/second**, first-token latency **0.84s**.
 - **Partial CPU (60 GPU / 6 CPU):** **2.8 - 3.1 tokens/second**, first-token latency **12.5s**.
 
-GDQ Colab Kit enforces **100% GPU offloading** with `num_ctx 4096` to maximize token throughput and eliminate client timeouts.
+Colab Router enforces **100% GPU offloading** with `num_ctx 4096` to maximize token throughput and eliminate client timeouts.
 
 ---
 

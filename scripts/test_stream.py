@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - SSE Streaming Inference Benchmark
+Colab Router - SSE Streaming Inference Benchmark
 ==================================================
 Tests streaming chat completions against your Colab Gateway,
 measuring Time-to-First-Token (TTFT) and token generation speed (t/s).
@@ -23,7 +23,7 @@ MODEL = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
 def main():
     prompt = "Explain quantum computing in 2 short bullet points."
     print("=" * 65)
-    print(f"🚀 Benchmarking GDQ Colab Gateway: {BASE_URL}")
+    print(f"🚀 Benchmarking Colab Router Gateway: {BASE_URL}")
     print(f"🧠 Model: {MODEL}")
     print(f"💬 Prompt: '{prompt}'")
     print("=" * 65)

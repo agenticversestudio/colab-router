@@ -1,4 +1,4 @@
-# 🌌 GDQ Colab Kit
+﻿# 🌌 Colab Router
 
 <div align="center">
 
@@ -6,7 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Ollama](https://img.shields.io/badge/Ollama-Accelerated-white.svg)](https://ollama.com)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/gdq-colab-kit/blob/main/colab/notebook.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/colab-router/blob/main/colab/notebook.ipynb)
 
 **Turn Free Google Colab into a 24/7 Sovereign Autonomous Cloud AI Supercomputer & OpenAI-Compatible Inference Server.**
 
@@ -18,7 +18,7 @@
 
 ## 🌟 Overview
 
-**GDQ Colab Kit** (GPU Dynamic Queue Colab Kit) is an end-to-end, production-grade infrastructure toolkit that allows anyone to run large language models (up to **27 Billion parameters** on a free **Tesla T4 16GB GPU**, or up to **72B** on L4/A100) with **100% GPU offloading**, **OpenAI-compatible streaming endpoints**, and **autonomous multi-account shift rotation for continuous 24/7 uptime**.
+**Colab Router** (Colab Router) is an end-to-end, production-grade infrastructure toolkit that allows anyone to run large language models (up to **27 Billion parameters** on a free **Tesla T4 16GB GPU**, or up to **72B** on L4/A100) with **100% GPU offloading**, **OpenAI-compatible streaming endpoints**, and **autonomous multi-account shift rotation for continuous 24/7 uptime**.
 
 ### Key Highlights:
 - 🚀 **100% GPU VRAM Offload:** Fits 27B models (`qwen3.8-27b-uncensored`, `qwen2.5-14b`, `llama3.1-8b`) completely in GPU memory with zero CPU offload bottlenecks (**~12 t/s throughput, 0.68s latency**).
@@ -45,7 +45,7 @@ flowchart TD
     end
 
     subgraph ColabVM["Active Google Colab VM (Tesla T4 16GB GPU)"]
-        Gateway["FastAPI Sovereign Gateway (:8000)\n• /v1/chat/completions (SSE Stream)\n• /ps (Hardware Telemetry)\n• Bearer & Passkey Auth Gate"]
+        Gateway["FastAPI Colab Router Gateway (:8000)\n• /v1/chat/completions (SSE Stream)\n• /ps (Hardware Telemetry)\n• Bearer & Passkey Auth Gate"]
         Ollama["Ollama Daemon (:11434)\n• 66/66 GPU Layers on CUDA0\n• 4096 Context Window\n• Flash Attention 1"]
         Watchdog["In-Container Watchdog\n• CUDA Tensor Heartbeat Pulse\n• Self-Healing Revival Loop"]
     end
@@ -85,8 +85,8 @@ Choose the deployment method that fits your workflow:
 
 #### Step 1: Clone & Install Dependencies
 ```bash
-git clone https://github.com/your-username/gdq-colab-kit.git
-cd gdq-colab-kit
+git clone https://github.com/your-username/colab-router.git
+cd colab-router
 pip install -r requirements.txt
 cp .env.example .env
 ```
@@ -117,7 +117,7 @@ python orchestrator/auth_helper.py
 
 Google Colab free-tier GPU instances enforce an account-level limit after ~3.5 to 5 hours of sustained compute. Attempting to force a single account to run for 12 hours results in sudden disconnects and a 24-hour lockout.
 
-GDQ Colab Kit solves this mathematically using a **3-Account 3.5-Hour Rotation Matrix**:
+Colab Router solves this mathematically using a **3-Account 3.5-Hour Rotation Matrix**:
 
 $$\text{Shift Duration} = 3.5 \text{ hours}$$
 $$\text{Full Rotation Cycle} = 3 \times 3.5 = 10.5 \text{ hours}$$
@@ -154,7 +154,7 @@ python scripts/check_status.py
 ```
 ```text
 =================================================================
-🔍 Probing GDQ Colab Gateway: https://your-domain.ngrok-free.dev
+🔍 Probing Colab Router Gateway: https://your-domain.ngrok-free.dev
 =================================================================
 [✓] Gateway Liveness: healthy
 
@@ -214,7 +214,7 @@ for chunk in response:
 
 ## 🇮🇳 Hindi Quick Guide (हिंदी मार्गदर्शिका)
 
-**GDQ Colab Kit** ek complete open-source toolkit hai jo aapke **Google Colab ke free GPU (Tesla T4 16GB)** ko ek 24/7 chalne wale **AI Supercomputer & OpenAI API Server** me convert kar deta hai.
+**Colab Router** ek complete open-source toolkit hai jo aapke **Google Colab ke free GPU (Tesla T4 16GB)** ko ek 24/7 chalne wale **AI Supercomputer & OpenAI API Server** me convert kar deta hai.
 
 ### Kaise Kaam Karta Hai?
 1. **1-Click Run:** Agar aapko turant chalana hai, to `colab/notebook.ipynb` ko Colab me kholiye, apna Ngrok token daliye aur **Run All** dabaiye.
@@ -228,7 +228,7 @@ for chunk in response:
 ## 📁 Repository Structure
 
 ```text
-gdq-colab-kit/
+colab-router/
 ├── .env.example              # Safe configuration template (No secrets)
 ├── .gitignore                # Comprehensive Git ignore rules
 ├── LICENSE                   # MIT License

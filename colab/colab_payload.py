@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - Remote Colab Payload Runner
+Colab Router - Remote Colab Payload Runner
 ===========================================
 High-Availability Autonomous Daemon running inside Google Colab (Tesla T4 / A100 / L4 GPU).
 
@@ -205,7 +205,7 @@ def launch_gateway_and_tunnel():
         pass
 
     log("=" * 65)
-    log("[OK] GDQ COLAB SUPERCOMPUTER ENGINE IS ONLINE!")
+    log("[OK] COLAB ROUTER ENGINE IS ONLINE!")
     log(f"🌐 Ingress URL: {active_url or 'http://localhost:8000'}")
     log(f"🧠 Model:       {OLLAMA_MODEL_TAG}")
     log(f"⚡ Context:     {NUM_CTX} tokens")
@@ -266,7 +266,7 @@ def watchdog_and_keepalive_loop():
             log(f"[Watchdog loop error] {e}")
 
 if __name__ == "__main__":
-    log("🚀 Initializing GDQ Colab Kit Sovereign Engine...")
+    log("🚀 Initializing Colab Router Sovereign Engine...")
     install_system_dependencies()
     weights = ensure_model_weights()
     launch_ollama_daemon(weights)

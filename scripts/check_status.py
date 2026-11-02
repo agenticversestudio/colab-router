@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - Quick Telemetry & Health Checker
+Colab Router - Quick Telemetry & Health Checker
 ================================================
 Checks if your Colab gateway is online, queries real-time GPU VRAM telemetry,
 and prints model allocation metrics.
@@ -22,7 +22,7 @@ PASSKEY = os.environ.get("GDQ_PASSKEY", "")
 
 def main():
     print("=" * 65)
-    print(f"🔍 Probing GDQ Colab Gateway: {BASE_URL}")
+    print(f"🔍 Probing Colab Router Gateway: {BASE_URL}")
     print("=" * 65)
 
     # 1. Health Probe

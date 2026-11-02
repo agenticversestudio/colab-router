@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - In-Container Fast Healing Script
+Colab Router - In-Container Fast Healing Script
 ================================================
 Executed inside the Google Colab VM to cleanly kill hung processes,
 restart the Ollama daemon, and re-lock the model in GPU VRAM.

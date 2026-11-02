@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - Decoupled Sovereign Gateway (FastAPI + SSE Streaming)
+Colab Router - Decoupled Colab Router Gateway (FastAPI + SSE Streaming)
 =====================================================================
 Stateless, OpenAI-compatible Inference Proxy running inside Google Colab.
 
@@ -37,7 +37,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OLLAMA_MODEL_TAG = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
 
 app = FastAPI(
-    title="GDQ Colab Sovereign Inference Gateway",
+    title="Colab Router Colab Router Gateway",
     version="3.0.0",
     docs_url="/docs",
     redoc_url=None
@@ -104,7 +104,7 @@ async def is_model_in_vram() -> bool:
 @app.get("/")
 def index():
     return {
-        "service": "GDQ Colab Kit Sovereign Gateway",
+        "service": "Colab Router Colab Router Gateway",
         "status": "online",
         "endpoints": {
             "health": "/health",
@@ -116,7 +116,7 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "GDQ Colab Kit Gateway"}
+    return {"status": "healthy", "service": "Colab Router Gateway"}
 
 @app.get("/warmup_status")
 async def warmup_status():
@@ -181,8 +181,8 @@ async def list_models(req: Request):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
     models_list = [
-        {"id": OLLAMA_MODEL_TAG, "object": "model", "owned_by": "gdq-colab-kit"},
-        {"id": "default", "object": "model", "owned_by": "gdq-colab-kit"}
+        {"id": OLLAMA_MODEL_TAG, "object": "model", "owned_by": "colab-router"},
+        {"id": "default", "object": "model", "owned_by": "colab-router"}
     ]
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:

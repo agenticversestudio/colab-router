@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-GDQ Colab Kit - Multi-Account Authentication Helper
+Colab Router - Multi-Account Authentication Helper
 ===================================================
 Interactive CLI utility to authenticate Google accounts with `colab-cli`
 and organize their tokens into the vault for multi-account shift rotation.
@@ -18,7 +18,7 @@ COLAB_TOKEN_PATH = os.path.join(COLAB_CONFIG_DIR, "token.json")
 
 def main():
     print("=" * 65)
-    print("🔑 GDQ Colab Kit - Multi-Account Auth Vault Setup")
+    print("🔑 Colab Router - Multi-Account Auth Vault Setup")
     print("=" * 65)
     print("This utility helps you authenticate each Google account via colab-cli")
     print("and archives its token into the local vault for 24/7 rotation.\n")

@@ -1,4 +1,4 @@
-# 🚀 GDQ Colab Kit - Setup & User Guide
+﻿# 🚀 Colab Router - Setup & User Guide
 
 This guide walks you through deploying your sovereign AI server using either:
 - **Mode A (Simple):** Manual 1-Click Google Colab Notebook (ideal for quick sessions or testing).
@@ -30,8 +30,8 @@ This guide walks you through deploying your sovereign AI server using either:
 ### Step 1: Clone and Configure Environment
 
 ```bash
-git clone https://github.com/your-username/gdq-colab-kit.git
-cd gdq-colab-kit
+git clone https://github.com/your-username/colab-router.git
+cd colab-router
 pip install -r requirements.txt
 cp .env.example .env
 ```
