@@ -77,11 +77,28 @@ def is_authorized(req: Request) -> bool:
 # ----------------- Service Status Probing -----------------
 async def is_ollama_online() -> bool:
     try:
-        async with httpx.AsyncClient(timeout=1.0) as client:
+        async with httpx.AsyncClient(timeout=4.0) as client:
             r = await client.get("http://127.0.0.1:11434/api/tags")
             return r.status_code == 200
     except Exception:
         return False
+
+async def is_model_in_vram() -> bool:
+    """Check whether the model is already loaded and running in GPU VRAM.
+    Ollama's /api/ps shows models currently occupying GPU memory.
+    Returns True if the model is warm and ready to serve instantly.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            r = await client.get("http://127.0.0.1:11434/api/ps")
+            if r.status_code == 200:
+                data = r.json()
+                models = data.get("models", [])
+                if models:
+                    return True
+    except Exception:
+        pass
+    return False
 
 # ----------------- Endpoints -----------------
 @app.get("/")
@@ -100,6 +117,21 @@ def index():
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "GDQ Colab Kit Gateway"}
+
+@app.get("/warmup_status")
+async def warmup_status():
+    """Returns whether the model is ready to serve requests (warm in VRAM) or still loading."""
+    ollama_ok = await is_ollama_online()
+    model_warm = await is_model_in_vram() if ollama_ok else False
+    return {
+        "ollama_online": ollama_ok,
+        "model_in_vram": model_warm,
+        "ready": model_warm,
+        "message": "Ready to serve!" if model_warm else (
+            "Ollama is loading — model VRAM warmup in progress (~2-5 minutes after cold start)."
+            if ollama_ok else "Ollama daemon is still starting up (~30-60 seconds)."
+        )
+    }
 
 @app.post("/auth/verify")
 async def verify_auth(req: Request):
@@ -195,11 +227,24 @@ async def stream_groq(model: str, messages: list, temperature: float = 0.6, max_
 
 # ----------------- Ollama SSE Streaming & Reasoning Sanitizer -----------------
 async def stream_ollama(model: str, messages: list, temperature: float = 0.6, max_tokens: int = None):
-    # Check if local Ollama is active; if warming up, optionally fallback
-    if not await is_ollama_online():
+    # Check if local Ollama is active; if warming up, optionally fallback to Groq
+    ollama_ok = await is_ollama_online()
+    if not ollama_ok:
         async for chunk in stream_groq(model, messages, temperature, max_tokens):
             yield chunk
         return
+
+    # If Ollama is up but model isn't in VRAM yet, warn client then proceed
+    # (request itself will still queue and wait; Ollama handles the load internally)
+    model_warm = await is_model_in_vram()
+    if not model_warm:
+        # Emit a system notice as a comment so SSE doesn't break; real content follows
+        warmup_notice = {
+            "id": "warmup-notice",
+            "object": "chat.completion.chunk",
+            "choices": [{"delta": {"role": "assistant", "content": "⏳ [Model loading into GPU VRAM — first response may take 1-3 minutes. Subsequent responses are instant.]\n\n"}, "index": 0, "finish_reason": None}]
+        }
+        yield f"data: {json.dumps(warmup_notice)}\n\n"
 
     url = "http://127.0.0.1:11434/v1/chat/completions"
     payload = {

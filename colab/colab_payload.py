@@ -128,13 +128,23 @@ PARAMETER stop "<|endoftext|>"
     log("[*] Pre-warming model into GPU VRAM via detached script...")
     # Detached lock call ensures client drops never abort model load
     os.system(f"nohup python3 -c \"import requests; requests.post('http://127.0.0.1:11434/api/generate', json={{'model': '{OLLAMA_MODEL_TAG}', 'keep_alive': -1}}, timeout=300)\" > /content/vram_lock.log 2>&1 &")
-    
-    # Wait up to 180 seconds for VRAM allocation
-    for _ in range(36):
+
+    # Wait up to 180 seconds for model to appear in /api/ps (VRAM loaded, not just Ollama online)
+    log("[*] Waiting for model to lock into GPU VRAM (up to 180s)...")
+    for attempt in range(36):
         time.sleep(5)
         try:
-            r = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
-            if r.status_code == 200:
+            r_ps = requests.get("http://127.0.0.1:11434/api/ps", timeout=3)
+            if r_ps.status_code == 200:
+                ps_data = r_ps.json()
+                if ps_data.get("models"):
+                    log(f"[OK] Model confirmed in GPU VRAM after {(attempt+1)*5}s!")
+                    break
+            # Fallback: at least confirm Ollama is alive
+            r_tags = requests.get("http://127.0.0.1:11434/api/tags", timeout=2)
+            if r_tags.status_code == 200 and attempt >= 12:
+                # After 60s, if Ollama is alive, the vram lock is running in background
+                log("[OK] Ollama alive — VRAM lock running in background.")
                 break
         except Exception:
             pass

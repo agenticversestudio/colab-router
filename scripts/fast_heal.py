@@ -28,7 +28,8 @@ def heal():
     time.sleep(4)
 
     log("[*] Re-triggering detached model lock in GPU VRAM...")
-    os.system("nohup python3 -c \"import requests; requests.post('http://127.0.0.1:11434/api/generate', json={'model': 'qwen3.8-27b-uncensored', 'keep_alive': -1}, timeout=300)\" > /content/vram_lock.log 2>&1 &")
+    model_tag = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
+    os.system(f"nohup python3 -c \"import requests; requests.post('http://127.0.0.1:11434/api/generate', json={{'model': '{model_tag}', 'keep_alive': -1}}, timeout=300)\" > /content/vram_lock.log 2>&1 &")
     time.sleep(5)
 
     log("[✓] Fast heal completed. Model loading into VRAM in background.")

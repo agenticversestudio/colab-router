@@ -12,5 +12,9 @@ pyngrok>=7.2.0
 typer>=0.12.0
 rich>=13.9.0
 
-# Optional Colab CLI Integration
-google-colab-cli>=0.1.0
+# NOTE: The Google Colab CLI (colab) is NOT available on PyPI.
+# Install it separately via:
+#   pip install google-colab-cli
+# OR follow the official guide:
+#   https://github.com/googlecolab/colab-cli
+# The orchestrator requires `colab` to be available on your PATH.

@@ -54,7 +54,19 @@ logging.basicConfig(
 logger = logging.getLogger("GDQOrchestrator")
 
 # ----------------- Settings & Accounts -----------------
-HEALTH_URL = os.environ.get("INGRESS_HEALTH_URL", "https://your-domain.ngrok-free.dev/v1/models")
+_HEALTH_URL_DEFAULT = "https://your-domain.ngrok-free.dev/v1/models"
+HEALTH_URL = os.environ.get("INGRESS_HEALTH_URL", _HEALTH_URL_DEFAULT)
+
+# Startup validation — fail fast with a clear message instead of silently polling a placeholder
+if "your-domain" in HEALTH_URL or HEALTH_URL == _HEALTH_URL_DEFAULT:
+    print(
+        "\n" + "=" * 70 + "\n"
+        "  ❌  ORCHESTRATOR STARTUP BLOCKED — INGRESS_HEALTH_URL NOT SET\n"
+        "  Set INGRESS_HEALTH_URL in your .env file to your Ngrok public URL.\n"
+        "  Example:  INGRESS_HEALTH_URL=https://abc123.ngrok-free.app/v1/models\n"
+        "=" * 70 + "\n"
+    )
+    sys.exit(1)
 API_KEY = os.environ.get("GDQ_API_KEY", "sk-gdq-default-key")
 PASSKEY = os.environ.get("GDQ_PASSKEY", "")
 SHIFT_MAX_HOURS = float(os.environ.get("SHIFT_MAX_HOURS", 3.5))
@@ -176,27 +188,44 @@ class GDQOrchestrator:
         """
         logger.info("[⚡] Attempting fast in-container service revival...")
         try:
-            heal_code = """import os, time
-os.system("pkill -9 -f llama-server; pkill -9 -f ollama || true")
-time.sleep(2)
-os.system("nohup /usr/local/bin/ollama serve > /content/ollama_stdout.log 2>&1 &")
-time.sleep(4)
-os.system("nohup python3 -c \\\"import requests; requests.post('http://127.0.0.1:11434/api/generate', json={'model': 'qwen3.8-27b-uncensored', 'keep_alive': -1}, timeout=300)\\\" > /dev/null 2>&1 &")
-"""
+            # Upload the dedicated fast_heal.py from repo (includes env-aware model tag)
             heal_script = os.path.join(SCRIPTS_DIR, "fast_heal.py")
-            with open(heal_script, "w", encoding="utf-8") as f:
-                f.write(heal_code)
+            if not os.path.exists(heal_script):
+                logger.warning(f"fast_heal.py not found at {heal_script}. Skipping fast heal.")
+                return False, False
 
-            res = subprocess.run(
-                ["colab", "exec", "-s", SESSION_NAME, "-f", heal_script],
+            # Set OLLAMA_MODEL_TAG env in the remote exec by prepending it
+            model_tag = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
+            wrapper_code = (
+                f"import os\n"
+                f"os.environ['OLLAMA_MODEL_TAG'] = '{model_tag}'\n"
+                f"exec(open('/content/fast_heal.py').read())\n"
+            )
+            wrapper_script = os.path.join(SCRIPTS_DIR, "_heal_wrapper.py")
+            with open(wrapper_script, "w", encoding="utf-8") as f:
+                f.write(wrapper_code)
+
+            # Upload heal script into container
+            subprocess.run(
+                ["colab", "upload", "-s", SESSION_NAME, heal_script, "/content/fast_heal.py"],
                 capture_output=True, text=True, timeout=30
             )
+
+            # Execute wrapper — use 180s timeout (model VRAM lock takes up to 120s)
+            res = subprocess.run(
+                ["colab", "exec", "-s", SESSION_NAME, "-f", wrapper_script],
+                capture_output=True, text=True, timeout=180
+            )
             out = f"{res.stdout.strip()} {res.stderr.strip()}".strip()
-            if "not found" in out.lower() or "lost" in out.lower() or res.returncode != 0:
+            if "not found" in out.lower() or "lost" in out.lower() or res.returncode not in (0, 1):
                 logger.warning("[!] Colab session lost. Rotating shift immediately.")
                 return False, True
-            time.sleep(10)
+            # Allow 45s for services to stabilize after background heal
+            time.sleep(45)
             return self.probe_health(), False
+        except subprocess.TimeoutExpired:
+            logger.warning("[!] Fast heal timed out after 180s — session may be overloaded.")
+            return False, False
         except Exception as e:
             logger.warning(f"Fast heal failed: {e}")
             return False, False
@@ -259,7 +288,7 @@ os.system("nohup python3 -c \\\"import requests; requests.post('http://127.0.0.1
             f.write("import os\nos.system('nohup python3 /content/colab_payload.py > /content/payload.log 2>&1 &')\n")
 
         logger.info("[*] Triggering detached setup payload on remote GPU...")
-        subprocess.run(["colab", "exec", "-s", SESSION_NAME, "-f", launcher_file], capture_output=True, text=True, timeout=60)
+        subprocess.run(["colab", "exec", "-s", SESSION_NAME, "-f", launcher_file], capture_output=True, text=True, timeout=120)
 
         self.state["current_account_index"] = account_index
         self.state["shift_started_at"] = time.time()
