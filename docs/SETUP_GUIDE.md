@@ -30,7 +30,7 @@ This guide walks you through deploying your sovereign AI server using either:
 ### Step 1: Clone and Configure Environment
 
 ```bash
-git clone https://github.com/your-username/colab-router.git
+git clone https://github.com/agenticversestudio/colab-router.git
 cd colab-router
 pip install -r requirements.txt
 cp .env.example .env

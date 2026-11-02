@@ -6,7 +6,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com)
 [![Ollama](https://img.shields.io/badge/Ollama-Accelerated-white.svg)](https://ollama.com)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/your-username/colab-router/blob/main/colab/notebook.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/agenticversestudio/colab-router/blob/main/colab/notebook.ipynb)
 
 **Turn Free Google Colab into a 24/7 Sovereign Autonomous Cloud AI Supercomputer & OpenAI-Compatible Inference Server.**
 
@@ -85,7 +85,7 @@ Choose the deployment method that fits your workflow:
 
 #### Step 1: Clone & Install Dependencies
 ```bash
-git clone https://github.com/your-username/colab-router.git
+git clone https://github.com/agenticversestudio/colab-router.git
 cd colab-router
 pip install -r requirements.txt
 cp .env.example .env
