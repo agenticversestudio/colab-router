@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  gdq-orchestrator:
+    build:
+      context: ..
+      dockerfile: orchestrator/Dockerfile
+    container_name: gdq-orchestrator
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../.env
+    volumes:
+      - ../vault:/app/vault
+      - ../logs:/app/logs
+      - ../state.json:/app/state.json
