@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Colab Router - Multi-Account Autonomous 24/7 Cloud Orchestrator Daemon
 ======================================================================
@@ -208,13 +208,13 @@ class ColabRouterOrchestrator:
             # Upload heal script into container
             subprocess.run(
                 ["colab", "upload", "-s", SESSION_NAME, heal_script, "/content/fast_heal.py"],
-                capture_output=True, text=True, timeout=30
+                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30
             )
 
             # Execute wrapper — use 180s timeout (model VRAM lock takes up to 120s)
             res = subprocess.run(
                 ["colab", "exec", "-s", SESSION_NAME, "-f", wrapper_script],
-                capture_output=True, text=True, timeout=180
+                capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=180
             )
             out = f"{res.stdout.strip()} {res.stderr.strip()}".strip()
             if "not found" in out.lower() or "lost" in out.lower() or res.returncode not in (0, 1):
@@ -246,7 +246,7 @@ class ColabRouterOrchestrator:
     def terminate_current_session(self):
         logger.info("[*] Releasing active Colab cloud sessions on server...")
         try:
-            subprocess.run(["colab", "stop", "-s", SESSION_NAME], capture_output=True, text=True, timeout=15)
+            subprocess.run(["colab", "stop", "-s", SESSION_NAME], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=15)
         except Exception:
             pass
 
@@ -264,7 +264,7 @@ class ColabRouterOrchestrator:
         self.terminate_current_session()
 
         logger.info("[*] Instantiating Tesla T4 GPU VM on Colab...")
-        res = subprocess.run(["colab", "new", "-s", SESSION_NAME, "--gpu", "T4"], capture_output=True, text=True)
+        res = subprocess.run(["colab", "new", "-s", SESSION_NAME, "--gpu", "T4"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
         combined_output = f"{res.stdout.strip()} {res.stderr.strip()}".strip()
         logger.info(f"Colab Provision Status: {combined_output}")
 
@@ -279,8 +279,8 @@ class ColabRouterOrchestrator:
         payload_local = os.path.join(COLAB_SCRIPTS_DIR, "colab_payload.py")
 
         logger.info("[*] Uploading server files directly to Colab container...")
-        subprocess.run(["colab", "upload", "-s", SESSION_NAME, server_local, "/content/hybrid_server.py"], capture_output=True, text=True)
-        subprocess.run(["colab", "upload", "-s", SESSION_NAME, payload_local, "/content/colab_payload.py"], capture_output=True, text=True)
+        subprocess.run(["colab", "upload", "-s", SESSION_NAME, server_local, "/content/hybrid_server.py"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+        subprocess.run(["colab", "upload", "-s", SESSION_NAME, payload_local, "/content/colab_payload.py"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
 
         # Trigger detached payload execution
         launcher_file = os.path.join(SCRIPTS_DIR, "launch_payload.py")
@@ -288,7 +288,7 @@ class ColabRouterOrchestrator:
             f.write("import os\nos.system('nohup python3 /content/colab_payload.py > /content/payload.log 2>&1 &')\n")
 
         logger.info("[*] Triggering detached setup payload on remote GPU...")
-        subprocess.run(["colab", "exec", "-s", SESSION_NAME, "-f", launcher_file], capture_output=True, text=True, timeout=120)
+        subprocess.run(["colab", "exec", "-s", SESSION_NAME, "-f", launcher_file], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
 
         self.state["current_account_index"] = account_index
         self.state["shift_started_at"] = time.time()
