@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Colab Router - Decoupled Colab Router Gateway (FastAPI + SSE Streaming)
 =====================================================================
@@ -31,7 +31,7 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 # ----------------- Environment Configuration -----------------
-GDQ_API_KEY = os.environ.get("GDQ_API_KEY", "sk-gdq-default-key")
+GDQ_API_KEY = os.environ.get("GDQ_API_KEY", "")
 GDQ_PASSKEY = os.environ.get("GDQ_PASSKEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OLLAMA_MODEL_TAG = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
@@ -53,9 +53,9 @@ app.add_middleware(
 
 # ----------------- Authentication Helper -----------------
 def is_authorized(req: Request) -> bool:
-    # If no API key or passkey is configured, gateway is open
+    # Fail closed: if no API key / passkey is configured, nobody is authorized.
     if not GDQ_API_KEY and not GDQ_PASSKEY:
-        return True
+        return False
 
     auth_header = req.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip()
@@ -141,11 +141,11 @@ async def verify_auth(req: Request):
 
 @app.get("/ps")
 async def process_status(req: Request):
-    """Returns real-time GPU VRAM allocation from nvidia-smi and Ollama process runner state."""
+    """Truthful status. engine == "ollama" only when the model is really loaded on the GPU."""
     if not is_authorized(req):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
-    gpu_info = "GPU Telemetry Unavailable"
+    gpu_info = "n/a"
     try:
         res = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.used,memory.free,utilization.gpu", "--format=csv,noheader"],
@@ -153,22 +153,31 @@ async def process_status(req: Request):
         )
         if res.returncode == 0:
             gpu_info = res.stdout.strip()
-    except Exception as e:
-        gpu_info = str(e)
+    except Exception:
+        pass
 
-    ollama_info = "Ollama Runner State Unavailable"
-    try:
-        res = subprocess.run(
-            ["ollama", "ps"],
-            capture_output=True, text=True, timeout=3
-        )
-        if res.returncode == 0:
-            ollama_info = res.stdout.strip()
-    except Exception as e:
-        ollama_info = str(e)
+    ollama_up = await is_ollama_online()
+    ollama_info = ""
+    if ollama_up:
+        try:
+            res = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=3)
+            if res.returncode == 0:
+                ollama_info = res.stdout.strip()
+        except Exception:
+            pass
+
+    if ollama_up and OLLAMA_MODEL_TAG in ollama_info:
+        engine = "ollama"
+    elif ollama_up:
+        engine = "loading"
+    elif GROQ_API_KEY:
+        engine = "groq-fallback"
+    else:
+        engine = "none"
 
     return {
-        "status": "online",
+        "status": "online" if engine == "ollama" else "degraded",
+        "engine": engine,
         "gpu_telemetry": gpu_info,
         "ollama_ps": ollama_info,
         "timestamp": time.time()

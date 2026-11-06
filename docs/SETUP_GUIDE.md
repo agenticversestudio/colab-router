@@ -1,14 +1,14 @@
-﻿# 🚀 Colab Router - Setup & User Guide
+# 🚀 Colab Router - Setup & User Guide
 
 This guide walks you through deploying your sovereign AI server using either:
 - **Mode A (Simple):** Manual 1-Click Google Colab Notebook (ideal for quick sessions or testing).
-- **Mode B (Pro):** Automated 24/7 Multi-Account Orchestrator Daemon (zero human intervention).
+- **Mode B (Advanced):** Orchestrator daemon that restarts the Colab shift for you when it dies (best-effort, **not** 24/7; see RESTART_GUIDE.md).
 
 ---
 
 ## Prerequisites
 
-1. **Google Account:** 1 account (for Mode A) or 2-3 accounts (for Mode B 24/7 uptime).
+1. **Google Account:** 1 account (recommended for both modes).
 2. **Ngrok Account:** Free token from [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken).
 3. **Python 3.10+** (if running the orchestrator locally or on a server).
 
@@ -25,7 +25,7 @@ This guide walks you through deploying your sovereign AI server using either:
 
 ---
 
-## Mode B: 24/7 Multi-Account Orchestrator Setup
+## Mode B: Orchestrator Setup (advanced, best-effort)
 
 ### Step 1: Clone and Configure Environment
 

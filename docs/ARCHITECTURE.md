@@ -1,4 +1,4 @@
-﻿# 🏛️ Architecture Specification & Technical Mechanics
+# 🏛️ Architecture Specification & Technical Mechanics
 
 **Colab Router** transforms Google Colab into a high-availability, sovereign, OpenAI-compatible AI supercomputer. This document explains the underlying engineering design, memory mechanics, and failure mitigations.
 
@@ -21,7 +21,7 @@ flowchart TD
     subgraph ColabHost["Google Colab VM (Tesla T4 GPU 15.3GB VRAM)"]
         FastAPI["Decoupled FastAPI Hybrid Gateway (:8000)\n• /v1/chat/completions\n• /v1/models\n• /ps (Real-Time Hardware Telemetry)\n• Passkey / Bearer Auth Gate"]
         OllamaEngine["Ollama Runtime (:11434)\n• 66/66 Layers Offloaded to CUDA0\n• 4096 Context Length\n• Flash Attention Enabled"]
-        Watchdog["Autonomous In-Container Watchdog\n• CUDA Tensor Keep-Alive Pulses\n• Auto-Revives Dead Daemons"]
+        Watchdog["Autonomous In-Container Watchdog\n• Optional CUDA pulse (off by default)\n• Auto-Revives Dead Daemons"]
     end
 
     subgraph Controller["Orchestration Layer (Local / Koyeb / VPS)"]
@@ -62,27 +62,25 @@ Colab Router enforces **100% GPU offloading** with `num_ctx 4096` to maximize to
 
 ---
 
-## 3. Defeating Google Colab Idle Reaping
+## 3. Colab limits (what you cannot get around)
 
-Google Colab enforces aggressive idle timeouts:
-1. **Frontend Disconnect Timeout:** Closes VMs if no browser tab is active for ~30 minutes.
-2. **GPU Idle Reaper:** Reaps VM if no CUDA kernels are scheduled for >20 minutes.
-3. **Execution Block Timeout:** Terminates long running blocking cells if standard output is silent.
+From the official [Colab FAQ](https://research.google.com/colaboratory/intl/en-GB/faq.html):
+- Free notebooks run **at most 12 hours**, depending on availability and usage. Runtimes time out when idle.
+- GPUs are **not guaranteed** and usage limits are not published and fluctuate.
+- Not allowed on free runtimes: web-service/file/media hosting, connecting to remote proxies, using multiple accounts to work around limits, and bypassing the notebook UI to work mainly through a web UI.
 
-### GDQ Mitigations:
-- **Detached Execution (`nohup`):** The payload runs as an independent Linux daemon detached from the Jupyter session.
-- **Continuous CUDA Tensor Pulse:** Every 30 seconds, the watchdog schedules an in-memory PyTorch CUDA tensor multiplication (`torch.matmul(torch.randn(128, 128, device="cuda"))`). This keeps the CUDA kernel utilization non-zero without consuming measurable power.
-- **Active Web Keep-Alive:** The built-in HTTP server on port 8080 allows free cloud host monitors (UptimeRobot, Koyeb, Render) to keep the orchestration chain active.
+What this project does about it:
+- **Detached execution (`nohup`):** services run independently of the notebook cell.
+- **Self-healing watchdog:** restarts dead Ollama / gateway processes inside the VM.
+- **Honest health:** `/ps` reports `engine: ollama` only when the model is truly loaded.
+- **Backoff:** when Google has no free GPU, the orchestrator waits 5 / 10 / 20 / 40 / 60 min instead of hammering.
+
+What it does **not** do: guarantee uptime. In practice, expect sessions of a few hours and gaps when Google has no free T4.
+
+> The ngrok/tunnel part exposes a web service from Colab, which the FAQ lists as disallowed on free runtimes. Use it knowingly, for your own light use.
 
 ---
 
-## 4. The 3-Account 24/7 Shift Rotation Formula
+## 4. Multi-account rotation (off by default, risky)
 
-Google Colab enforces a daily compute unit limit per Google account on the free tier. A single free session typically yields 3.5 to 4.5 hours of continuous GPU compute before temporary throttling.
-
-By cycling through **3 independent Google accounts**:
-- **Shift Duration:** 3.5 hours per account.
-- **Full Rotation Cycle:** $3 \times 3.5 = 10.5$ hours.
-- **Account Rest Period:** $2 \times 3.5 = 7.0$ hours.
-
-7 hours of rest is sufficient for Google's quota counter to fully replenish. Thus, the 3-account cycle sustains **24/7 autonomous compute indefinitely**.
+The orchestrator can hand over between several Google accounts (`ACCOUNT_COUNT=2` or `3`). The Colab FAQ disallows *"using multiple accounts to work around access or resource usage restrictions"*, and in real logs it did not raise uptime (Google answered "Service Unavailable" for every account). It is kept only as an advanced option. **Default is one account.**

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Colab Router - Multi-Account Autonomous 24/7 Cloud Orchestrator Daemon
-======================================================================
-Production-Grade Orchestrator for Local Machines, VPS, Koyeb, Render, or Docker.
+Colab Router - Colab Shift Orchestrator (best-effort, NOT guaranteed 24/7)
+==========================================================================
+Starts a Colab T4 shift, health-checks it and restarts it when it dies. Free Colab does not
+guarantee GPUs or session length, so expect gaps. See RESTART_GUIDE.md.
 
 Features:
   - Built-in HTTP Health & Keep-Alive Server (Listens on os.environ.get('PORT', 8080))
   - Multi-Account Token Vault Ingestion via Environment Variables or Mounted Vault Directory
   - Headless Colab VM Provisioning via `google-colab-cli`
-  - Preemptive Shift Handover (Zero GPU Quota Lockouts)
+  - Optional multi-account handover (OFF by default; see ACCOUNT_COUNT, read the warning)
   - 30-Second Ingress Probing & Self-Healing Auto-Failover
 """
 
@@ -67,11 +68,20 @@ if "your-domain" in HEALTH_URL or HEALTH_URL == _HEALTH_URL_DEFAULT:
         "=" * 70 + "\n"
     )
     sys.exit(1)
-API_KEY = os.environ.get("GDQ_API_KEY", "sk-gdq-default-key")
+API_KEY = os.environ.get("GDQ_API_KEY", "")
+if not API_KEY:
+    sys.exit("[FATAL] GDQ_API_KEY is not set. Put it in your .env (see .env.example).")
 PASSKEY = os.environ.get("GDQ_PASSKEY", "")
 SHIFT_MAX_HOURS = float(os.environ.get("SHIFT_MAX_HOURS", 3.5))
 HEALTH_CHECK_INTERVAL = int(os.environ.get("HEALTH_CHECK_INTERVAL", 30))
 CONSECUTIVE_FAILURES_LIMIT = int(os.environ.get("CONSECUTIVE_FAILURES_LIMIT", 5))
+# ACCOUNT_COUNT=1 (default): only the first account is used, no rotation.
+# Colab's FAQ disallows "using multiple accounts to work around access or resource usage
+# restrictions". Set 2+ only if you accept the risk of your accounts being restricted.
+ACCOUNT_COUNT = max(1, int(os.environ.get("ACCOUNT_COUNT", 1)))
+# When Google has no free T4 ("Service Unavailable"), wait with exponential backoff: 5, 10, 20, 40 ... min.
+BACKOFF_BASE_SECONDS = int(os.environ.get("BACKOFF_BASE_SECONDS", 300))
+BACKOFF_MAX_SECONDS = int(os.environ.get("BACKOFF_MAX_SECONDS", 3600))
 PORT = int(os.environ.get("PORT", 8080))
 SESSION_NAME = os.environ.get("COLAB_SESSION_NAME", "colab_router_engine")
 
@@ -100,6 +110,7 @@ def discover_accounts():
     return accounts
 
 ACCOUNTS = discover_accounts()
+ACTIVE_ACCOUNTS = ACCOUNTS[:ACCOUNT_COUNT]
 
 def load_state():
     if os.path.exists(STATE_FILE):
@@ -162,22 +173,18 @@ class ColabRouterOrchestrator:
         self.state = load_state()
 
     def probe_health(self) -> bool:
+        """Healthy only if the gateway answers AND the model is really loaded on the GPU."""
         try:
             headers = {"Authorization": f"Bearer {API_KEY}", "ngrok-skip-browser-warning": "true"}
             r = requests.get(HEALTH_URL, headers=headers, timeout=8)
             if r.status_code != 200:
                 return False
-
             ps_url = HEALTH_URL.replace("/v1/models", "/ps").replace("/models", "/ps")
-            ps_headers = {"Authorization": f"Bearer {API_KEY}", "x-passkey": PASSKEY, "ngrok-skip-browser-warning": "true"}
+            ps_headers = {**headers, "x-passkey": PASSKEY}
             r_ps = requests.get(ps_url, headers=ps_headers, timeout=8)
-            if r_ps.status_code == 200:
-                ps_data = r_ps.json()
-                gpu_telemetry = ps_data.get("gpu_telemetry", "")
-                ollama_ps = ps_data.get("ollama_ps", "")
-                if "100% GPU" in ollama_ps or "MiB" in gpu_telemetry:
-                    return True
-            return True
+            if r_ps.status_code != 200:
+                return False
+            return r_ps.json().get("engine") == "ollama"
         except Exception as e:
             logger.debug(f"Health probe notice: {e}")
             return False
@@ -257,22 +264,22 @@ class ColabRouterOrchestrator:
         logger.info("=" * 65)
 
         if not self.deploy_token(account_index):
-            time.sleep(5)
-            self.rotate_shift("Missing token in vault")
-            return False
+            return "no_token"
 
         self.terminate_current_session()
 
         logger.info("[*] Instantiating Tesla T4 GPU VM on Colab...")
-        res = subprocess.run(["colab", "new", "-s", SESSION_NAME, "--gpu", "T4"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+        try:
+            res = subprocess.run(["colab", "new", "-s", SESSION_NAME, "--gpu", "T4"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+        except subprocess.TimeoutExpired:
+            logger.warning("⚠️ 'colab new' timed out after 120s (Google did not assign a GPU).")
+            return "provision_failed"
         combined_output = f"{res.stdout.strip()} {res.stderr.strip()}".strip()
-        logger.info(f"Colab Provision Status: {combined_output}")
+        logger.info(f"Colab Provision Status: {combined_output[-300:]}")
 
-        if res.returncode != 0 or "refused" in combined_output.lower() or "limit" in combined_output.lower():
-            logger.warning(f"⚠️ GPU VM provision failed for {account['name']}. Rotating to backup account...")
-            time.sleep(5)
-            self.rotate_shift(f"GPU Quota/Precondition on {account['name']}")
-            return False
+        if res.returncode != 0 or "refused" in combined_output.lower() or "limit" in combined_output.lower() or "service unavailable" in combined_output.lower():
+            logger.warning(f"⚠️ GPU VM provision failed for {account['name']} (no free T4 or refused). Caller will back off.")
+            return "provision_failed"
 
         # Upload scripts
         server_local = os.path.join(COLAB_SCRIPTS_DIR, "hybrid_server.py")
@@ -293,6 +300,7 @@ class ColabRouterOrchestrator:
         self.state["current_account_index"] = account_index
         self.state["shift_started_at"] = time.time()
         self.state["consecutive_failures"] = 0
+        self.state["provision_failures"] = 0
         self.state["status"] = "booting"
         save_state(self.state)
 
@@ -307,22 +315,36 @@ class ColabRouterOrchestrator:
                 logger.info("=" * 65)
                 self.state["status"] = "running"
                 save_state(self.state)
-                return True
+                return "online"
 
         logger.warning("[!] Warmup period elapsed; continuing health supervision.")
-        return False
+        return "warmup_timeout"
+
+    def backoff_seconds(self) -> int:
+        n = self.state.get("provision_failures", 0)
+        return min(BACKOFF_BASE_SECONDS * (2 ** max(0, n - 1)), BACKOFF_MAX_SECONDS)
 
     def rotate_shift(self, reason: str):
-        next_index = (self.state.get("current_account_index", 0) + 1) % len(ACCOUNTS)
-        logger.info("=" * 65)
-        logger.info(f"🔄 ROTATION TRIGGERED: {reason}")
-        logger.info(f"Current Slot: {self.state.get('current_account_index', 0)} ➔ Next Slot: {next_index}")
-        logger.info("=" * 65)
-
-        self.state["current_account_index"] = next_index
-        self.state["total_rotations"] += 1
-        save_state(self.state)
-        self.launch_shift(next_index)
+        """Start a fresh shift. Iterative (no recursion). With ACCOUNT_COUNT=1 it retries the same account after a backoff."""
+        cur = self.state.get("current_account_index", 0)
+        while True:
+            next_index = (cur + 1) % len(ACTIVE_ACCOUNTS)
+            logger.info("=" * 65)
+            logger.info(f"🔄 SHIFT RESTART: {reason} | slot {cur} ➔ {next_index} (accounts in use: {len(ACTIVE_ACCOUNTS)})")
+            logger.info("=" * 65)
+            self.state["current_account_index"] = next_index
+            self.state["total_rotations"] = self.state.get("total_rotations", 0) + 1
+            save_state(self.state)
+            result = self.launch_shift(next_index)
+            if result not in ("provision_failed", "no_token"):
+                return result
+            self.state["provision_failures"] = self.state.get("provision_failures", 0) + 1
+            self.state["status"] = "waiting_for_gpu" if result == "provision_failed" else "missing_token"
+            save_state(self.state)
+            wait = self.backoff_seconds()
+            logger.warning(f"⏳ {result}: waiting {wait // 60} min before retrying (failure #{self.state['provision_failures']})...")
+            time.sleep(wait)
+            cur = next_index
 
     def run(self):
         logger.info("🌌 Colab Router Autonomous Orchestrator Started")
@@ -335,7 +357,10 @@ class ColabRouterOrchestrator:
             save_state(self.state)
         else:
             logger.info("[!] Gateway offline. Starting initial boot sequence...")
-            self.launch_shift(self.state.get("current_account_index", 0))
+            if self.launch_shift(self.state.get("current_account_index", 0) % len(ACTIVE_ACCOUNTS)) in ("provision_failed", "no_token"):
+                self.state["provision_failures"] = self.state.get("provision_failures", 0) + 1
+                save_state(self.state)
+                self.rotate_shift("Initial boot: no GPU assigned")
 
         while True:
             try:
@@ -344,7 +369,7 @@ class ColabRouterOrchestrator:
 
                 # Preemptive Shift Handover
                 elapsed_hrs = (now - self.state.get("shift_started_at", now)) / 3600.0
-                if elapsed_hrs >= SHIFT_MAX_HOURS:
+                if len(ACTIVE_ACCOUNTS) > 1 and elapsed_hrs >= SHIFT_MAX_HOURS:
                     logger.info(f"⏰ Shift limit reached ({elapsed_hrs:.2f} hrs). Initiating scheduled rotation.")
                     self.rotate_shift("Scheduled Handover")
                     continue

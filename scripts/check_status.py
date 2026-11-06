@@ -17,7 +17,7 @@ if not BASE_URL:
     BASE_URL = input("Enter your Colab Gateway URL (e.g. https://xxx.ngrok-free.dev or http://localhost:8000): ").strip()
 
 BASE_URL = BASE_URL.rstrip("/")
-API_KEY = os.environ.get("GDQ_API_KEY", "sk-gdq-default-key")
+API_KEY = os.environ.get("GDQ_API_KEY", "")
 PASSKEY = os.environ.get("GDQ_PASSKEY", "")
 
 def main():

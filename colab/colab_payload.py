@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Colab Router - Remote Colab Payload Runner
 ===========================================
@@ -212,7 +212,7 @@ def launch_gateway_and_tunnel():
     log("=" * 65)
 
 def watchdog_and_keepalive_loop():
-    """Autonomous in-container supervisor that auto-restarts dead services and sends GPU pulses."""
+    """In-container supervisor that auto-restarts dead services (GPU pulse is optional and OFF by default)."""
     log("[*] Watchdog supervisor initialized.")
     consecutive_gw_errors = 0
     consecutive_ollama_errors = 0
@@ -221,8 +221,11 @@ def watchdog_and_keepalive_loop():
         try:
             time.sleep(30)
 
-            # 1. Active GPU compute pulse (prevents Google Colab idle termination)
+            # 1. Optional GPU pulse. OFF by default (set KEEPALIVE_PULSE=1 to enable, at your own risk):
+            #    it does not prevent Colab session limits and may count as circumventing idle limits.
             try:
+                if os.environ.get("KEEPALIVE_PULSE") != "1":
+                    raise RuntimeError("pulse disabled")
                 import torch
                 if torch.cuda.is_available():
                     _ = torch.matmul(torch.randn(128, 128, device="cuda"), torch.randn(128, 128, device="cuda"))
