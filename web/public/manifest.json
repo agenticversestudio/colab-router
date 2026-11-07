@@ -1,0 +1,16 @@
+{
+  "name": "Agentic Studio",
+  "short_name": "AgenticStudio",
+  "description": "Executive Sovereign AI Command & Control Center",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080C14",
+  "theme_color": "#080C14",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
