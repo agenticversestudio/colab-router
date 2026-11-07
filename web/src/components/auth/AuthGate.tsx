@@ -155,13 +155,13 @@ export const AuthGate: React.FC = () => {
             {showAdvanced && (
               <div className="mt-2 rounded-xl border border-white/5 bg-black/30 p-3">
                 <label className="mb-1 block text-[11px] text-slate-400">
-                  Target Ngrok / Gateway URL
+                  Custom Sovereign Ingress Endpoint
                 </label>
                 <input
                   type="url"
                   value={customBaseUrl}
                   onChange={e => setCustomBaseUrl(e.target.value)}
-                  placeholder="https://your-domain.ngrok-free.dev or http://localhost:8000"
+                  placeholder="https://your-custom-gateway.com or http://localhost:8000"
                   className="w-full rounded-lg border border-white/10 bg-[#161F36] px-3 py-1.5 text-xs text-white outline-none focus:border-blue-500"
                 />
               </div>
