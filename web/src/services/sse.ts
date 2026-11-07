@@ -160,24 +160,47 @@ export async function streamChatCompletion(
   let tokenCount = 0;
   let inThinkingBlock = false;
 
+  // Direct high-speed routing if model is a cloud LPU model or no gateway configured
+  const isGroqDirect = model.startsWith('qwen/') || model.startsWith('openai/') || !baseUrl;
+  if (isGroqDirect) {
+    await streamGroqFallback(messages, model, callbacks, signal, temperature, startTime);
+    return;
+  }
+
   try {
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authKey}`,
-        'x-passkey': activePasskey,
-        'ngrok-skip-browser-warning': 'true'
-      },
-      body: JSON.stringify({
-        model: model || 'qwen3.8-27b-uncensored',
-        messages,
-        stream: true,
-        temperature,
-        max_tokens: 4096
-      }),
-      signal
-    });
+    const connectController = new AbortController();
+    const timeoutId = setTimeout(() => connectController.abort(), 3500);
+
+    const abortHandler = () => connectController.abort();
+    if (signal) {
+      signal.addEventListener('abort', abortHandler);
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authKey}`,
+          'x-passkey': activePasskey,
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({
+          model: model || 'qwen3.8-27b-uncensored',
+          messages,
+          stream: true,
+          temperature,
+          max_tokens: 4096
+        }),
+        signal: connectController.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      if (signal) {
+        signal.removeEventListener('abort', abortHandler);
+      }
+    }
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
@@ -277,7 +300,7 @@ export async function streamChatCompletion(
 
     callbacks.onFinish();
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (signal?.aborted) {
       callbacks.onFinish();
       return;
     }
