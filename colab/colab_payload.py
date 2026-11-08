@@ -21,6 +21,19 @@ import subprocess
 import threading
 import requests
 
+
+# Load secrets from /content/secrets.json if available
+if os.path.exists('/content/secrets.json'):
+    try:
+        import json
+        with open('/content/secrets.json') as _sf:
+            _sec = json.load(_sf)
+            for _k, _v in _sec.items():
+                if _v and not os.environ.get(_k):
+                    os.environ[_k] = str(_v)
+    except Exception as _e:
+        print('[!] Warning: failed to load /content/secrets.json:', _e)
+
 # ----------------- Configuration & Defaults -----------------
 HF_MODEL_URL = os.environ.get(
     "HF_MODEL_URL",

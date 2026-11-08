@@ -30,6 +30,19 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
+
+# Load secrets from /content/secrets.json if available
+if os.path.exists('/content/secrets.json'):
+    try:
+        import json
+        with open('/content/secrets.json') as _sf:
+            _sec = json.load(_sf)
+            for _k, _v in _sec.items():
+                if _v and not os.environ.get(_k):
+                    os.environ[_k] = str(_v)
+    except Exception as _e:
+        print('[!] Warning: failed to load /content/secrets.json:', _e)
+
 # ----------------- Environment Configuration -----------------
 GDQ_API_KEY = os.environ.get("GDQ_API_KEY", "")
 GDQ_PASSKEY = os.environ.get("GDQ_PASSKEY", "")
