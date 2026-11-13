@@ -6,11 +6,7 @@ export interface ModelOption {
 }
 
 export const FALLBACK_MODELS: ModelOption[] = [
-  { id: 'qwen3.8-27b-uncensored', name: 'Qwen 3.8 27B Uncensored (Flagship Engine)' },
-  { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B (Groq Sovereign LPU - 24/7 Zero Downtime)' },
-  { id: 'deepseek-v4.1', name: 'DeepSeek V4.1 (Deep Reasoning Engine)' },
-  { id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B (High-Precision Cloud Engine)' },
-  { id: 'glm-5.3', name: 'GLM 5.3 (Complex Logic Engine)' }
+  { id: 'qwen3.8-27b-uncensored', name: 'Qwen 3.8 27B Uncensored (Dedicated Colab T4 GPU)' }
 ];
 
 const SOVEREIGN_FALLBACK_KEY = 'sk-jaggu-7f89d3a4c5e21b0698f12a3d4e5f60718293a4b5c6d7e8f9';
@@ -87,36 +83,9 @@ export async function fetchTelemetry() {
       lastUpdated: Date.now()
     };
   } catch {
-    // If local/Colab gateway is offline, check Sovereign Groq LPU Cloud status if key configured
-    const groqKey = (import.meta.env.VITE_GROQ_API_KEY as string) || '';
-    if (groqKey) {
-      try {
-        const groqPingStart = performance.now();
-        const groqRes = await fetch('https://api.groq.com/openai/v1/models', {
-          headers: {
-            'Authorization': `Bearer ${groqKey}`
-          }
-        });
-        if (groqRes.ok) {
-          return {
-            status: 'online' as const,
-            gpuName: 'Groq Sovereign Cloud LPU (Auto-Failover Active)',
-            vramUsedMb: 16384,
-            vramTotalMb: 16384,
-            gpuUtilization: 98,
-            pingMs: Math.round(performance.now() - groqPingStart),
-            ollamaPs: 'qwen/qwen3.8-27b (24/7 Zero Downtime Active)',
-            lastUpdated: Date.now()
-          };
-        }
-      } catch {
-        // Groq unreachable
-      }
-    }
-
     return {
       status: 'offline' as const,
-      gpuName: 'Tesla T4 (Cloud Disconnected)',
+      gpuName: 'Tesla T4 (Disconnected)',
       vramUsedMb: 0,
       vramTotalMb: 15360,
       gpuUtilization: 0,
@@ -125,4 +94,5 @@ export async function fetchTelemetry() {
       lastUpdated: Date.now()
     };
   }
+}
 }

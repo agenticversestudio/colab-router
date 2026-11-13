@@ -7,140 +7,6 @@ export interface StreamCallbacks {
   onFinish: () => void;
 }
 
-const GROQ_FALLBACK_KEY = (import.meta.env.VITE_GROQ_API_KEY as string) || '';
-
-async function streamGroqFallback(
-  messages: Array<{ role: string; content: string }>,
-  model: string,
-  callbacks: StreamCallbacks,
-  signal?: AbortSignal,
-  temperature: number = 0.6,
-  existingStartTime?: number,
-  _primaryError?: string
-) {
-  if (!GROQ_FALLBACK_KEY) {
-    callbacks.onError(`Sovereign AI Cluster is currently synchronizing. Please ensure your Colab GPU session is active and try again.`);
-    callbacks.onFinish();
-    return;
-  }
-  const startTime = existingStartTime || performance.now();
-  let firstTokenTime: number | null = null;
-  let tokenCount = 0;
-  let inThinkingBlock = false;
-
-  const m = (model || '').toLowerCase();
-  const groqModel = (m.includes('deepseek') || m.includes('glm') || m.includes('120b'))
-    ? 'openai/gpt-oss-120b'
-    : 'qwen/qwen3.8-27b';
-
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_FALLBACK_KEY}`
-    },
-    body: JSON.stringify({
-      model: groqModel,
-      messages,
-      stream: true,
-      temperature,
-      max_tokens: 4096
-    }),
-    signal
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Sovereign Cloud Engine Error (${response.status}): ${errText}`);
-  }
-
-  if (!response.body) {
-    throw new Error('ReadableStream not supported by cloud gateway');
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder('utf-8');
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith(':')) continue;
-
-      if (trimmed === 'data: [DONE]') {
-        break;
-      }
-
-      if (trimmed.startsWith('data: ')) {
-        try {
-          const json = JSON.parse(trimmed.slice(6));
-          const delta = json.choices?.[0]?.delta;
-          if (!delta) continue;
-
-          if (firstTokenTime === null) {
-            firstTokenTime = performance.now();
-          }
-
-          let reasoningText: string | undefined = undefined;
-          let normalText: string | undefined = undefined;
-
-          if (delta.reasoning_content) {
-            reasoningText = delta.reasoning_content;
-            tokenCount += Math.max(1, Math.round(((reasoningText ?? '').length) / 4));
-          }
-
-          if (delta.content) {
-            const content = delta.content;
-            tokenCount += Math.max(1, Math.round(content.length / 4));
-
-            if (content.includes('<think>')) {
-              inThinkingBlock = true;
-              const parts = content.split('<think>');
-              if (parts[0]) normalText = (normalText || '') + parts[0];
-              if (parts[1]) reasoningText = (reasoningText || '') + parts[1];
-            } else if (content.includes('</think>')) {
-              inThinkingBlock = false;
-              const parts = content.split('</think>');
-              if (parts[0]) reasoningText = (reasoningText || '') + parts[0];
-              if (parts[1]) normalText = (normalText || '') + parts[1];
-            } else if (inThinkingBlock) {
-              reasoningText = (reasoningText || '') + content;
-            } else {
-              normalText = (normalText || '') + content;
-            }
-          }
-
-          if (normalText || reasoningText) {
-            callbacks.onChunk(normalText || '', reasoningText);
-          }
-        } catch {
-          // ignore parse error
-        }
-      }
-    }
-  }
-
-  const totalDurationMs = Math.round(performance.now() - startTime);
-  const ttftMs = firstTokenTime ? Math.round(firstTokenTime - startTime) : totalDurationMs;
-  const generationDurationSec = Math.max(0.1, (totalDurationMs - ttftMs) / 1000);
-  const tokensPerSec = Math.round((tokenCount / generationDurationSec) * 10) / 10;
-
-  callbacks.onMetrics({
-    ttftMs,
-    tokensPerSec: tokensPerSec > 0 ? tokensPerSec : 250,
-    totalDurationMs
-  });
-
-  callbacks.onFinish();
-}
-
 const SOVEREIGN_FALLBACK_KEY = 'sk-jaggu-7f89d3a4c5e21b0698f12a3d4e5f60718293a4b5c6d7e8f9';
 const SOVEREIGN_PASSKEY = 'gqd@534$$AV';
 
@@ -160,16 +26,17 @@ export async function streamChatCompletion(
   let tokenCount = 0;
   let inThinkingBlock = false;
 
-  // Direct high-speed routing if model is a cloud LPU model or no gateway configured
-  const isGroqDirect = model.startsWith('qwen/') || model.startsWith('openai/') || !baseUrl;
-  if (isGroqDirect) {
-    await streamGroqFallback(messages, model, callbacks, signal, temperature, startTime);
+  // Direct Colab Gateway connection - no silent third-party model hijacking
+  if (!baseUrl) {
+    callbacks.onError('Inference Gateway URL is not configured. Please enter your Colab Ngrok URL in settings.');
+    callbacks.onFinish();
     return;
   }
 
   try {
     const connectController = new AbortController();
-    const timeoutId = setTimeout(() => connectController.abort(), 3500);
+    // 120s timeout allows 27B LLM on Tesla T4 adequate time for prompt evaluation
+    const timeoutId = setTimeout(() => connectController.abort(), 120000);
 
     const abortHandler = () => connectController.abort();
     if (signal) {
@@ -204,14 +71,14 @@ export async function streamChatCompletion(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      const primaryErr = `(HTTP ${response.status}: ${errText || response.statusText})`;
-      // If primary gateway returns 404/502/503/etc., seamlessly switch to Sovereign Cloud LPU
-      await streamGroqFallback(messages, model, callbacks, signal, temperature, startTime, primaryErr);
+      callbacks.onError(`Colab Gateway returned HTTP ${response.status}: ${errText || response.statusText}. Please verify that your Colab GPU session is active.`);
+      callbacks.onFinish();
       return;
     }
 
     if (!response.body) {
-      await streamGroqFallback(messages, model, callbacks, signal, temperature, startTime, 'Empty response body from gateway');
+      callbacks.onError('Empty response body received from Colab Gateway.');
+      callbacks.onFinish();
       return;
     }
 
@@ -305,15 +172,12 @@ export async function streamChatCompletion(
       return;
     }
 
-    // Transparently auto-failover to Groq Sovereign Cloud LPU!
-    try {
-      const primaryErr = err instanceof Error ? `(${err.message})` : '';
-      await streamGroqFallback(messages, model, callbacks, signal, temperature, startTime, primaryErr);
-      return;
-    } catch (fallbackErr: unknown) {
-      const rawError = fallbackErr instanceof Error ? fallbackErr.message : (err instanceof Error ? err.message : 'Unknown streaming error');
-      callbacks.onError(rawError);
-      callbacks.onFinish();
+    const errMessage = err instanceof Error ? err.message : 'Unknown streaming error';
+    if (errMessage.includes('aborted') || (err as any)?.name === 'AbortError') {
+      callbacks.onError('Request timed out after 120s. Qwen 3.8 27B on Colab GPU may be warming up or evaluating tokens.');
+    } else {
+      callbacks.onError(`Connection to Qwen 3.8 27B failed: ${errMessage}. Please ensure your Colab GPU session is active and reachable.`);
     }
+    callbacks.onFinish();
   }
 }

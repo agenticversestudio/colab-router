@@ -265,8 +265,9 @@ async def stream_ollama(model: str, messages: list, temperature: float = 0.6, ma
     # Check if local Ollama is active; if warming up, optionally fallback to Groq
     ollama_ok = await is_ollama_online()
     if not ollama_ok:
-        async for chunk in stream_groq(model, messages, temperature, max_tokens):
-            yield chunk
+        err = {"error": {"message": "Qwen 3.8 27B engine is initializing on Tesla T4 GPU. Please wait 30-60 seconds for VRAM warmup.", "type": "model_warming_up"}}
+        yield f"data: {json.dumps(err)}\n\n"
+        yield "data: [DONE]\n\n"
         return
 
     # If Ollama is up but model isn't in VRAM yet, warn client then proceed
@@ -311,8 +312,9 @@ async def stream_ollama(model: str, messages: list, temperature: float = 0.6, ma
                                 pass
                         yield f"{chunk}\n\n"
     except Exception as e:
-        async for chunk in stream_groq(model, messages, temperature, max_tokens):
-            yield chunk
+        err = {"error": {"message": f"Qwen 3.8 27B inference error on Tesla T4: {str(e)}", "type": "gpu_engine_error"}}
+        yield f"data: {json.dumps(err)}\n\n"
+        yield "data: [DONE]\n\n" 
 
 # ----------------- Chat Completions Entrypoint -----------------
 @app.post("/v1/chat/completions")
@@ -343,7 +345,9 @@ async def completions(req: Request):
                 "X-Accel-Buffering": "no",
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "*"
+                "Access-Control-Allow-Headers": "*",
+                "X-Model-Served": OLLAMA_MODEL_TAG,
+                "X-Hardware-Offload": "Tesla-T4-100%-VRAM"
             }
         )
     else:
