@@ -22,6 +22,7 @@
 
 ### Key Highlights:
 - 🚀 **27B model on a free T4:** `qwen3.8-27b-uncensored` (IQ4_XS, ~14.3 GB) fits in the T4's VRAM with a short context (4096).
+- 🔄 **3 Dedicated Shift Notebooks & Hardware Switcher:** Isolated notebooks for 3 accounts with pre-flight hardware gatekeeper and switch_account.py to guarantee T4 GPU allocation.
 - 🔌 **OpenAI-compatible:** `/v1/chat/completions` (SSE streaming) and `/v1/models`, works with Cursor, Cline, Open-WebUI, the OpenAI SDK.
 - 🛡️ **Self-healing inside the VM:** the watchdog restarts dead Ollama / gateway processes.
 - 📊 **Truthful health:** `/ps` says `engine: ollama` only when the model is really loaded on the GPU.

@@ -47,6 +47,41 @@ Repo ke `AGENTS.md` ki wajah se IDE khud `python scripts/doctor.py` chalata hai.
 
 Agar IDE `AGENTS.md` na padhe to `AGENT_PROMPT.md` mein ek line likhi hai, wo bol do.
 
+## 3 Accounts & 3 Alag Notebooks Setup (Permanent GPU Switching Solution)
+
+Agar aapke paas 3 Gmail accounts hain, to ek notebook share karne se runtime conflict aur CPU default ho jata hai. Ab har account ke liye dedicated notebook aur permanent GPU switcher tayyar hai:
+
+### 1. 3 Dedicated Notebooks
+- **Account 1 (`jmdotaryan@gmail.com`):** `colab/notebook_shift1_primary.ipynb` (Shift 1: 08:00 - 16:00 UTC)
+- **Account 2 (`iconjagat@gmail.com`):** `colab/notebook_shift2_iconjagat.ipynb` (Shift 2: 16:00 - 00:00 UTC)
+- **Account 3 (`ecogainnexus@gmail.com`):** `colab/notebook_shift3_ecogainnexus.ipynb` (Shift 3: 00:00 - 08:00 UTC)
+
+> **Zaroori:** Har Gmail account me uski dedicated notebook khol kar `File → Save a copy in Drive` karein, taaki har account ka apna personal runtime context ban jaye.
+
+### 2. Kyun pehle CPU/GPU change nahi ho raha tha? (Root Cause & Fix)
+1. **Sessions Conflict:** `colab-cli` sessions ko `~/.config/colab-cli/sessions.json` me store karta hai. Sirf `token.json` badalne se purana session aur uska CPU runtime attach rehta tha.
+2. **Explicit `--gpu T4` flag:** Colab CLI me jab tak `--gpu T4` flag na diya jaye, Google Colab silently default **CPU** runtime assign kar deta hai.
+3. **Hardware Gatekeeper:** Har notebook ke pehle cell me **T4 GPU Gatekeeper** add kar diya gaya hai. Agar session galti se CPU par chalu ho to ye turant alert dekar ruk jata hai taaki time aur quota waste na ho.
+
+### 3. CLI Switcher Kaise Chalayein:
+Terminal se ek command me switch aur GPU verify karein:
+```bash
+# Shift 1 (primary - jmdotaryan@gmail.com) par switch aur T4 GPU verify:
+python switch_account.py 1
+
+# Shift 2 (iconjagat@gmail.com) par switch aur T4 GPU verify:
+python switch_account.py 2
+
+# Shift 3 (ecogainnexus@gmail.com) par switch aur T4 GPU verify:
+python switch_account.py 3
+
+# Auto-Switch (Teeno accounts scan karega aur jisme GPU quota bacha ho usse connect karega):
+python switch_account.py auto
+
+# Status check:
+python switch_account.py status
+```
+
 ## GLM 5.3 aur DeepSeek V4.1 kaise use karein
 Ye is gateway par nahi chalte (bahut bade). **OpenCode app** mein inke free hosted models hain:
 `glm-5.3-flash-free` aur `deepseek-v4.1-flash-free`. OpenCode ke docs ke hisaab se free models
