@@ -9,6 +9,12 @@ colab_vault/
 *.key
 *.pem
 *.secret
+*SECRETS*
+*secrets*
+secrets.json
+_container_secrets.json
+*.bak
+*.orig
 
 # Logs & Runtime State
 logs/

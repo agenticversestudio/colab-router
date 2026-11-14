@@ -9,18 +9,16 @@ export const FALLBACK_MODELS: ModelOption[] = [
   { id: 'qwen3.8-27b-uncensored', name: 'Qwen 3.8 27B Uncensored (Dedicated Colab T4 GPU)' }
 ];
 
-const SOVEREIGN_FALLBACK_KEY = 'sk-jaggu-7f89d3a4c5e21b0698f12a3d4e5f60718293a4b5c6d7e8f9';
-const SOVEREIGN_PASSKEY = 'gqd@534$$AV';
 
 export async function fetchAvailableModels(): Promise<ModelOption[]> {
   const { baseUrl: rawUrl, apiKey, passkey } = useAuthStore.getState();
   const baseUrl = (rawUrl || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
-  const authKey = apiKey || SOVEREIGN_FALLBACK_KEY;
+  const authKey = apiKey || passkey;
   try {
     const res = await fetch(`${baseUrl}/v1/models`, {
       headers: {
         'Authorization': `Bearer ${authKey}`,
-        'x-passkey': passkey || SOVEREIGN_PASSKEY,
+        'x-passkey': passkey,
         'ngrok-skip-browser-warning': 'true'
       }
     });
@@ -41,13 +39,13 @@ export async function fetchAvailableModels(): Promise<ModelOption[]> {
 export async function fetchTelemetry() {
   const { baseUrl: rawUrl, apiKey, passkey } = useAuthStore.getState();
   const baseUrl = (rawUrl || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
-  const authKey = apiKey || SOVEREIGN_FALLBACK_KEY;
+  const authKey = apiKey || passkey;
   const startTime = performance.now();
   try {
     const res = await fetch(`${baseUrl}/ps`, {
       headers: {
         'Authorization': `Bearer ${authKey}`,
-        'x-passkey': passkey || SOVEREIGN_PASSKEY,
+        'x-passkey': passkey,
         'ngrok-skip-browser-warning': 'true'
       }
     });
@@ -55,25 +53,37 @@ export async function fetchTelemetry() {
     if (!res.ok) throw new Error('Telemetry unavailable');
     const data = await res.json();
 
-    // Parse GPU telemetry string: e.g. "Tesla T4, 14317 MiB, 1043 MiB, 0 %"
+    // Truthful gateway status:
+    // engine: "ollama" = model loaded in VRAM (online)
+    // engine: "loading" = model currently warming up into VRAM (connecting)
+    // anything else = engine offline
+    let status: 'online' | 'connecting' | 'offline' = 'offline';
+    if (data.engine === 'ollama') {
+      status = 'online';
+    } else if (data.engine === 'loading') {
+      status = 'connecting';
+    } else {
+      status = 'offline';
+    }
+
     let gpuName = 'Tesla T4';
-    let vramUsedMb = 14317;
+    let vramUsedMb = 0;
     let vramTotalMb = 15360;
     let gpuUtilization = 0;
 
-    if (data.gpu_telemetry) {
+    if (data.gpu_telemetry && data.gpu_telemetry !== 'n/a') {
       const parts = data.gpu_telemetry.split(',').map((s: string) => s.trim());
       if (parts.length >= 4) {
         gpuName = parts[0];
-        vramUsedMb = parseInt(parts[1].replace(/[^0-9]/g, '')) || 14317;
-        const vramFree = parseInt(parts[2].replace(/[^0-9]/g, '')) || 1043;
-        vramTotalMb = vramUsedMb + vramFree;
+        vramUsedMb = parseInt(parts[1].replace(/[^0-9]/g, '')) || 0;
+        const vramFree = parseInt(parts[2].replace(/[^0-9]/g, '')) || 0;
+        vramTotalMb = (vramUsedMb + vramFree) || 15360;
         gpuUtilization = parseInt(parts[3].replace(/[^0-9]/g, '')) || 0;
       }
     }
 
     return {
-      status: 'online' as const,
+      status,
       gpuName,
       vramUsedMb,
       vramTotalMb,

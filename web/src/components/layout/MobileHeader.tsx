@@ -1,7 +1,8 @@
 import React from 'react';
 import { Menu, Activity, ChevronDown, Sparkles } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
-import { FALLBACK_MODELS } from '../../services/api';
+import { PROVIDER_IDS, useProviderStore } from '../../store/useProviderStore';
+import { ProvidersButton } from '../modals/ProvidersModal';
 
 interface Props {
   onToggleSidebar: () => void;
@@ -15,6 +16,7 @@ export const MobileHeader: React.FC<Props> = ({
   onOpenMCP
 }) => {
   const { selectedModel, setSelectedModel } = useChatStore();
+  const getConfig = useProviderStore(s => s.getConfig);
 
   return (
     <div className="flex h-14 w-full shrink-0 items-center justify-between border-b border-white/10 bg-[#080C14]/90 backdrop-blur-xl px-3 z-30">
@@ -41,9 +43,9 @@ export const MobileHeader: React.FC<Props> = ({
           onChange={e => setSelectedModel(e.target.value)}
           className="w-full appearance-none truncate rounded-xl border border-white/10 bg-[#0D1322] py-1.5 pl-2.5 pr-7 text-xs font-semibold text-slate-200 outline-none focus:border-blue-500/50 shadow-sm cursor-pointer"
         >
-          {FALLBACK_MODELS.map(m => (
-            <option key={m.id} value={m.id} className="bg-[#0D1322] text-white">
-              {m.name.split('(')[0].trim()}
+          {PROVIDER_IDS.map(id => (
+            <option key={id} value={id} className="bg-[#0D1322] text-white">
+              {getConfig(id).shortLabel}
             </option>
           ))}
         </select>
@@ -52,6 +54,7 @@ export const MobileHeader: React.FC<Props> = ({
 
       {/* Right: Quick MCP & Telemetry */}
       <div className="flex items-center gap-1.5">
+        <ProvidersButton compact />
         {onOpenMCP && (
           <button
             onClick={onOpenMCP}

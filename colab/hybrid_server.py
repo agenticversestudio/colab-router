@@ -46,6 +46,8 @@ if os.path.exists('/content/secrets.json'):
 # ----------------- Environment Configuration -----------------
 GDQ_API_KEY = os.environ.get("GDQ_API_KEY", "")
 GDQ_PASSKEY = os.environ.get("GDQ_PASSKEY", "")
+EXTRA_PASSKEY = os.environ.get("EXTRA_PASSKEY", "")
+ALLOWED_PASSKEYS = {p.strip() for p in [GDQ_PASSKEY, EXTRA_PASSKEY] if p.strip()}
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OLLAMA_MODEL_TAG = os.environ.get("OLLAMA_MODEL_TAG", "qwen3.8-27b-uncensored")
 
@@ -80,7 +82,7 @@ async def preflight_handler(full_path: str):
 # ----------------- Authentication Helper -----------------
 def is_authorized(req: Request) -> bool:
     # Fail closed: if no API key / passkey is configured, nobody is authorized.
-    if not GDQ_API_KEY and not GDQ_PASSKEY:
+    if not GDQ_API_KEY and not ALLOWED_PASSKEYS:
         return False
 
     auth_header = req.headers.get("Authorization", "")
@@ -95,7 +97,7 @@ def is_authorized(req: Request) -> bool:
 
     if GDQ_API_KEY and candidate == GDQ_API_KEY:
         return True
-    if GDQ_PASSKEY and (candidate == GDQ_PASSKEY or x_passkey == GDQ_PASSKEY):
+    if candidate in ALLOWED_PASSKEYS or x_passkey in ALLOWED_PASSKEYS:
         return True
 
     return False
@@ -163,6 +165,28 @@ async def warmup_status():
 async def verify_auth(req: Request):
     if is_authorized(req):
         return {"status": "ok", "authenticated": True}
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key or Passkey")
+
+@app.post("/auth/login")
+async def login_auth(req: Request):
+    """Verify login passkey or API key and return authentication confirmation."""
+    passkey_found = False
+    try:
+        data = await req.json()
+        cand = str(data.get("passkey") or data.get("api_key") or "").strip()
+        if cand:
+            if GDQ_API_KEY and cand == GDQ_API_KEY:
+                passkey_found = True
+            elif cand in ALLOWED_PASSKEYS:
+                passkey_found = True
+    except Exception:
+        pass
+
+    if not passkey_found and is_authorized(req):
+        passkey_found = True
+
+    if passkey_found:
+        return {"status": "ok", "authenticated": True, "token": GDQ_API_KEY or GDQ_PASSKEY}
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key or Passkey")
 
 @app.get("/ps")
@@ -294,6 +318,12 @@ async def stream_ollama(model: str, messages: list, temperature: float = 0.6, ma
     try:
         async with httpx.AsyncClient(timeout=1200.0) as client:
             async with client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    err_text = await response.aread()
+                    err = {"error": {"message": f"Ollama HTTP {response.status_code}: {err_text.decode('utf-8', errors='replace')}", "type": "ollama_error"}}
+                    yield f"data: {json.dumps(err)}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
                 async for chunk in response.aiter_lines():
                     if chunk:
                         # Forward SSE lines cleanly
@@ -356,9 +386,20 @@ async def completions(req: Request):
 
         url = "http://127.0.0.1:11434/v1/chat/completions"
         payload = {"model": ollama_model, "messages": messages, "stream": False, "temperature": temp, "max_tokens": max_tok or 4096}
-        async with httpx.AsyncClient(timeout=1200.0) as client:
-            r = await client.post(url, json=payload)
-            return JSONResponse(r.json())
+        try:
+            async with httpx.AsyncClient(timeout=1200.0) as client:
+                r = await client.post(url, json=payload)
+                if r.status_code != 200:
+                    return JSONResponse(
+                        {"error": {"message": f"Ollama error ({r.status_code}): {r.text}", "type": "ollama_error"}},
+                        status_code=r.status_code
+                    )
+                return JSONResponse(r.json())
+        except Exception as e:
+            return JSONResponse(
+                {"error": {"message": f"Inference failed: {str(e)}", "type": "gateway_error"}},
+                status_code=500
+            )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

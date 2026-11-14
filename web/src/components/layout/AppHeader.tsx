@@ -15,7 +15,8 @@ import {
 import { useChatStore } from '../../store/useChatStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useTelemetryStore } from '../../store/useTelemetryStore';
-import { FALLBACK_MODELS } from '../../services/api';
+import { PROVIDER_IDS, useProviderStore } from '../../store/useProviderStore';
+import { ProvidersButton } from '../modals/ProvidersModal';
 
 interface Props {
   onOpenMemory: () => void;
@@ -37,6 +38,7 @@ export const AppHeader: React.FC<Props> = ({
   onToggleRight
 }) => {
   const { selectedModel, setSelectedModel, clearActiveConversation } = useChatStore();
+  const getConfig = useProviderStore(s => s.getConfig);
   const logout = useAuthStore(s => s.logout);
   const { status, pingMs, vramUsedMb, refresh } = useTelemetryStore();
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -69,9 +71,9 @@ export const AppHeader: React.FC<Props> = ({
             onChange={e => setSelectedModel(e.target.value)}
             className="w-full appearance-none truncate rounded-xl border border-white/10 bg-[#0E1424] py-1.5 pl-3 pr-7 text-xs font-semibold text-slate-200 outline-none hover:border-blue-500/40 transition cursor-pointer"
           >
-            {FALLBACK_MODELS.map(m => (
-              <option key={m.id} value={m.id} className="bg-[#0E1424] text-white">
-                {m.name}
+            {PROVIDER_IDS.map(id => (
+              <option key={id} value={id} className="bg-[#0E1424] text-white">
+                {getConfig(id).label}
               </option>
             ))}
           </select>
@@ -112,6 +114,9 @@ export const AppHeader: React.FC<Props> = ({
 
       {/* Right: Workstation Action Controls */}
       <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+        {/* Models & API keys (Qwen default / DeepSeek / GLM) */}
+        <ProvidersButton />
+
         {/* Hermes Memory Button */}
         <button
           onClick={onOpenMemory}

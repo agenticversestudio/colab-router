@@ -4,6 +4,8 @@ import type { Message } from '../../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ReasoningAccordion } from './ReasoningAccordion';
 import { TokenSpeedBadge } from './TokenSpeedBadge';
+import { useProviderConfig, toProviderId } from '../../store/useProviderStore';
+import { useChatStore } from '../../store/useChatStore';
 
 interface Props {
   message: Message;
@@ -13,6 +15,9 @@ interface Props {
 export const ChatMessage: React.FC<Props> = ({ message, isStreaming = false }) => {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
+  const liveModel = useChatStore(s => s.selectedModel);
+  // Saved replies keep the model that wrote them; old replies (no tag) were Qwen.
+  const provider = useProviderConfig(toProviderId(message.model ?? (isStreaming ? liveModel : undefined)));
 
   const handleCopy = async () => {
     try {
@@ -49,9 +54,11 @@ export const ChatMessage: React.FC<Props> = ({ message, isStreaming = false }) =
         {/* Assistant Header Tag */}
         {!isUser && (
           <div className="mb-1.5 flex items-center gap-2 text-[11px] font-mono text-slate-400">
-            <span className="font-semibold text-slate-200">Qwen 3.8 27B</span>
+            <span className="font-semibold text-slate-200">{provider.shortLabel}</span>
             <span>•</span>
-            <span className="text-emerald-400">Tesla T4 16GB</span>
+            <span className={provider.kind === 'colab' ? 'text-emerald-400' : 'text-sky-400'}>
+              {provider.kind === 'colab' ? 'Tesla T4 16GB' : 'Cloud API'}
+            </span>
           </div>
         )}
 

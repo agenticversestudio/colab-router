@@ -20,10 +20,9 @@ export function normalizeBaseUrl(url: string): string {
   return cleaned;
 }
 
-const DEFAULT_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || 'https://eel-feminine-progeny.ngrok-free.dev';
-const MASTER_USER = 'glmdsqn@jaggu#av';
-const MASTER_PASSKEY = (import.meta.env.VITE_DEFAULT_PASSKEY as string) || 'gqd@534$$AV';
-const MASTER_API_KEY = 'sk-jaggu-7f89d3a4c5e21b0698f12a3d4e5f60718293a4b5c6d7e8f9';
+const DEFAULT_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '';
+// No credentials are baked into the bundle: everything shipped to Vercel is public.
+// The user types their passkey or sk- API key on the login screen; the gateway checks it.
 
 export const useAuthStore = create<AuthStore>((set) => {
   // Check localStorage first (if user enabled Save Info), otherwise sessionStorage
@@ -37,12 +36,12 @@ export const useAuthStore = create<AuthStore>((set) => {
   const isRemembered = localStorage.getItem('agentic_studio_remember') === 'true';
   const savedBaseUrl = localStorage.getItem('agentic_studio_base_url');
 
-  // Fall back to pre-configured sovereign credentials if not logged in or invalid
+  // Not logged in -> show the login screen (no built-in master credentials).
   const defaultAuth = {
-    isAuthenticated: true,
-    userId: MASTER_USER,
-    passkey: MASTER_PASSKEY,
-    apiKey: MASTER_API_KEY,
+    isAuthenticated: false,
+    userId: '',
+    passkey: '',
+    apiKey: '',
   };
 
   const activeAuth = initial && initial.isAuthenticated && (initial.apiKey?.startsWith('sk-') || initial.passkey)
@@ -51,9 +50,9 @@ export const useAuthStore = create<AuthStore>((set) => {
 
   return {
     isAuthenticated: !!activeAuth.isAuthenticated,
-    userId: activeAuth.userId || MASTER_USER,
-    passkey: activeAuth.passkey || MASTER_PASSKEY,
-    apiKey: activeAuth.apiKey || MASTER_API_KEY,
+    userId: activeAuth.userId || '',
+    passkey: activeAuth.passkey || '',
+    apiKey: activeAuth.apiKey || '',
     baseUrl: normalizeBaseUrl(savedBaseUrl || DEFAULT_BASE_URL),
     rememberMe: isRemembered,
 
@@ -62,7 +61,11 @@ export const useAuthStore = create<AuthStore>((set) => {
       const trimmedPass = passkey.trim();
       const activeBaseUrl = normalizeBaseUrl(customBaseUrl || localStorage.getItem('agentic_studio_base_url') || DEFAULT_BASE_URL);
 
-      let verifiedApiKey = trimmedPass.startsWith('sk-') ? trimmedPass : MASTER_API_KEY;
+      let verifiedApiKey = trimmedPass.startsWith('sk-') ? trimmedPass : '';
+
+      if (!trimmedPass) {
+        return false;
+      }
 
       if (activeBaseUrl && trimmedPass) {
         try {
@@ -73,7 +76,7 @@ export const useAuthStore = create<AuthStore>((set) => {
               'Content-Type': 'application/json',
               'ngrok-skip-browser-warning': 'true'
             },
-            body: JSON.stringify({ user_id: trimmedUser || MASTER_USER, passkey: trimmedPass })
+            body: JSON.stringify({ user_id: trimmedUser, passkey: trimmedPass })
           });
           if (loginRes.ok) {
             const data = await loginRes.json();
@@ -87,26 +90,24 @@ export const useAuthStore = create<AuthStore>((set) => {
               headers: {
                 'Authorization': `Bearer ${trimmedPass}`,
                 'x-passkey': trimmedPass,
-                'x-user-id': trimmedUser || MASTER_USER,
+                'x-user-id': trimmedUser,
                 'ngrok-skip-browser-warning': 'true'
               }
             });
-            if (!verifyRes.ok && trimmedPass !== MASTER_PASSKEY) {
+            if (verifyRes.status === 401 || verifyRes.status === 403) {
               return false;
             }
           }
         } catch {
-          // If network / CORS failure, allow access if matching sovereign passkey
-          if (trimmedPass !== MASTER_PASSKEY && !trimmedPass.startsWith('sk-')) {
-            return false;
-          }
+          // Gateway offline (Colab session ended): keep the typed credentials so the UI opens;
+          // the header shows "Offline" and the gateway still checks the key on every request.
         }
       }
 
       const authData = {
         isAuthenticated: true,
-        userId: trimmedUser || MASTER_USER,
-        passkey: trimmedPass || MASTER_PASSKEY,
+        userId: trimmedUser,
+        passkey: trimmedPass,
         apiKey: verifiedApiKey,
         baseUrl: activeBaseUrl
       };

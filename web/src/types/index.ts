@@ -8,6 +8,7 @@ export interface Message {
   tokensPerSec?: number;
   ttftMs?: number;
   totalDurationMs?: number;
+  model?: string; // provider id that produced this reply (qwen-colab / deepseek / glm)
 }
 
 export interface Conversation {

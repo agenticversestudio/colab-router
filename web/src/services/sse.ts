@@ -1,4 +1,5 @@
 import { useAuthStore } from '../store/useAuthStore';
+import { useProviderStore, toProviderId } from '../store/useProviderStore';
 
 export interface StreamCallbacks {
   onChunk: (contentChunk: string, reasoningChunk?: string) => void;
@@ -7,8 +8,6 @@ export interface StreamCallbacks {
   onFinish: () => void;
 }
 
-const SOVEREIGN_FALLBACK_KEY = 'sk-jaggu-7f89d3a4c5e21b0698f12a3d4e5f60718293a4b5c6d7e8f9';
-const SOVEREIGN_PASSKEY = 'gqd@534$$AV';
 
 export async function streamChatCompletion(
   messages: Array<{ role: string; content: string }>,
@@ -18,20 +17,53 @@ export async function streamChatCompletion(
   temperature: number = 0.6
 ) {
   const { baseUrl: rawUrl, apiKey, passkey } = useAuthStore.getState();
-  const baseUrl = (rawUrl || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
-  const authKey = apiKey || SOVEREIGN_FALLBACK_KEY;
-  const activePasskey = passkey || SOVEREIGN_PASSKEY;
+  const provider = useProviderStore.getState().getConfig(toProviderId(model));
+  const providerName = provider.shortLabel;
+  const isColab = provider.kind === 'colab';
+  const baseUrl = isColab
+    ? (rawUrl || '').trim().replace(/\/+$/, '').replace(/\/v1$/, '')
+    : provider.baseUrl.trim().replace(/\/+$/, '');
+  const authKey = isColab ? (apiKey || passkey) : provider.apiKey;
+  const activePasskey = passkey;
   const startTime = performance.now();
   let firstTokenTime: number | null = null;
   let tokenCount = 0;
   let inThinkingBlock = false;
 
-  // Direct Colab Gateway connection - no silent third-party model hijacking
+  // No silent fallback: the request goes only to the provider the user picked.
   if (!baseUrl) {
-    callbacks.onError('Inference Gateway URL is not configured. Please enter your Colab Ngrok URL in settings.');
+    callbacks.onError(isColab
+      ? 'Inference Gateway URL is not configured. Please enter your Colab Ngrok URL in settings.'
+      : `${providerName}: base URL is empty. Open "Models" in the header and set it.`);
     callbacks.onFinish();
     return;
   }
+  if (!isColab && !authKey) {
+    callbacks.onError(`${providerName}: API key missing. Open "Models" in the header, paste your ${providerName} API key and save.`);
+    callbacks.onFinish();
+    return;
+  }
+
+  // Colab: call the ngrok gateway directly (it sends CORS headers).
+  // Cloud APIs: go through our same-origin /api/llm proxy (most provider APIs block browser CORS).
+  // In `vite dev` there is no /api, so call the provider directly.
+  const useProxy = !isColab && !import.meta.env.DEV;
+  const requestUrl = isColab
+    ? `${baseUrl}/v1/chat/completions`
+    : useProxy ? '/api/llm' : `${baseUrl}/chat/completions`;
+  const requestHeaders: Record<string, string> = isColab
+    ? {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authKey}`,
+        'x-passkey': activePasskey,
+        'ngrok-skip-browser-warning': 'true'
+      }
+    : {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authKey}`,
+        ...(useProxy ? { 'x-target-base': baseUrl } : {})
+      };
+  const requestModel = provider.model || (isColab ? 'qwen3.8-27b-uncensored' : '');
 
   try {
     const connectController = new AbortController();
@@ -45,20 +77,15 @@ export async function streamChatCompletion(
 
     let response: Response;
     try {
-      response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      response = await fetch(requestUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authKey}`,
-          'x-passkey': activePasskey,
-          'ngrok-skip-browser-warning': 'true'
-        },
+        headers: requestHeaders,
         body: JSON.stringify({
-          model: model || 'qwen3.8-27b-uncensored',
+          model: requestModel,
           messages,
           stream: true,
           temperature,
-          max_tokens: 4096
+          max_tokens: 2048
         }),
         signal: connectController.signal
       });
@@ -71,7 +98,9 @@ export async function streamChatCompletion(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      callbacks.onError(`Colab Gateway returned HTTP ${response.status}: ${errText || response.statusText}. Please verify that your Colab GPU session is active.`);
+      callbacks.onError(isColab
+        ? `Colab Gateway returned HTTP ${response.status}: ${errText || response.statusText}. Please verify that your Colab GPU session is active.`
+        : `${providerName} returned HTTP ${response.status}: ${errText || response.statusText}. Check the API key, model ID ("${requestModel}") and account balance in "Models".`);
       callbacks.onFinish();
       return;
     }
@@ -174,9 +203,13 @@ export async function streamChatCompletion(
 
     const errMessage = err instanceof Error ? err.message : 'Unknown streaming error';
     if (errMessage.includes('aborted') || (err as any)?.name === 'AbortError') {
-      callbacks.onError('Request timed out after 120s. Qwen 3.8 27B on Colab GPU may be warming up or evaluating tokens.');
+      callbacks.onError(isColab
+        ? 'Request timed out after 120s. Qwen 3.8 27B on Colab GPU may be warming up or evaluating tokens.'
+        : `Request to ${providerName} timed out after 120s.`);
     } else {
-      callbacks.onError(`Connection to Qwen 3.8 27B failed: ${errMessage}. Please ensure your Colab GPU session is active and reachable.`);
+      callbacks.onError(isColab
+        ? `Connection to Qwen 3.8 27B failed: ${errMessage}. Please ensure your Colab GPU session is active and reachable.`
+        : `Connection to ${providerName} failed: ${errMessage}.`);
     }
     callbacks.onFinish();
   }

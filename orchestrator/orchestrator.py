@@ -281,13 +281,37 @@ class ColabRouterOrchestrator:
             logger.warning(f"⚠️ GPU VM provision failed for {account['name']} (no free T4 or refused). Caller will back off.")
             return "provision_failed"
 
-        # Upload scripts
+        # Upload scripts & secrets
         server_local = os.path.join(COLAB_SCRIPTS_DIR, "hybrid_server.py")
         payload_local = os.path.join(COLAB_SCRIPTS_DIR, "colab_payload.py")
 
         logger.info("[*] Uploading server files directly to Colab container...")
         subprocess.run(["colab", "upload", "-s", SESSION_NAME, server_local, "/content/hybrid_server.py"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
         subprocess.run(["colab", "upload", "-s", SESSION_NAME, payload_local, "/content/colab_payload.py"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+
+        # Upload runtime secrets into container
+        sec_dict = {
+            "NGROK_AUTHTOKEN": os.environ.get("NGROK_AUTHTOKEN", ""),
+            "NGROK_DOMAIN": os.environ.get("NGROK_DOMAIN", ""),
+            "GDQ_API_KEY": os.environ.get("GDQ_API_KEY", ""),
+            "GDQ_PASSKEY": os.environ.get("GDQ_PASSKEY", ""),
+            "HF_MODEL_URL": os.environ.get("HF_MODEL_URL", ""),
+            "MODEL_FILENAME": os.environ.get("MODEL_FILENAME", ""),
+            "OLLAMA_MODEL_TAG": os.environ.get("OLLAMA_MODEL_TAG", ""),
+            "NUM_CTX": os.environ.get("NUM_CTX", "4096"),
+            "NUM_PREDICT": os.environ.get("NUM_PREDICT", "2048"),
+        }
+        sec_temp = os.path.join(SCRIPTS_DIR, "_container_secrets.json")
+        try:
+            with open(sec_temp, "w", encoding="utf-8") as sf:
+                json.dump({k: v for k, v in sec_dict.items() if v}, sf, indent=2)
+            subprocess.run(["colab", "upload", "-s", SESSION_NAME, sec_temp, "/content/secrets.json"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=30)
+        finally:
+            if os.path.exists(sec_temp):
+                try:
+                    os.remove(sec_temp)
+                except Exception:
+                    pass
 
         # Trigger detached payload execution
         launcher_file = os.path.join(SCRIPTS_DIR, "launch_payload.py")

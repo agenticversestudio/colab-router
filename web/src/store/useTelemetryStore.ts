@@ -10,15 +10,15 @@ interface TelemetryStore extends TelemetryData {
 }
 
 export const useTelemetryStore = create<TelemetryStore>((set, get) => ({
-  status: 'connecting',
-  gpuName: 'Tesla T4 (16GB VRAM)',
-  vramUsedMb: 14317,
+  status: 'offline',
+  gpuName: 'Tesla T4',
+  vramUsedMb: 0,
   vramTotalMb: 15360,
   gpuUtilization: 0,
   pingMs: 0,
   activeModel: 'qwen3.8-27b-uncensored',
-  activeShift: 'Shift 1 (Active Cluster)',
-  shiftHoursLeft: 11.4,
+  activeShift: 'Direct Connection',
+  shiftHoursLeft: 0,
   lastUpdated: Date.now(),
   pollIntervalId: null,
 

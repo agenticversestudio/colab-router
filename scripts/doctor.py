@@ -9,6 +9,17 @@ Run:  python scripts/doctor.py
 import json, os, re, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.environ.get("COLAB_ROUTER_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def load_env():

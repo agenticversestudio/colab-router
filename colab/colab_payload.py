@@ -46,7 +46,7 @@ NGROK_TOKEN = os.environ.get("NGROK_AUTHTOKEN", "")
 NGROK_DOMAIN = os.environ.get("NGROK_DOMAIN", "")
 
 NUM_CTX = int(os.environ.get("NUM_CTX", 4096))
-NUM_PREDICT = int(os.environ.get("NUM_PREDICT", 4096))
+NUM_PREDICT = int(os.environ.get("NUM_PREDICT", 2048))
 LOCAL_SERVER_PORT = 8000
 
 def log(msg):
@@ -76,6 +76,21 @@ def ensure_model_weights():
     if os.path.exists(local_path) and os.path.getsize(local_path) > 2 * 1024 * 1024 * 1024:
         log(f"[OK] Using cached weights: {local_path} ({os.path.getsize(local_path)/(1024**3):.2f} GB)")
         return local_path
+
+    log(f"[*] Downloading weights via 16-stream aria2c to {local_path}...")
+    cmd = f'aria2c -c -x 16 -s 16 -k 1M "{HF_MODEL_URL}" -d "/content" -o "{MODEL_FILENAME}"'
+    ret = os.system(cmd)
+    if ret != 0 or not os.path.exists(local_path) or os.path.getsize(local_path) < 2 * 1024 * 1024 * 1024:
+        log("[!] aria2c download failed or incomplete. Retrying with curl (--fail -L)...")
+        if os.path.exists(local_path):
+            os.remove(local_path)
+        os.system(f'curl -fL --retry 3 "{HF_MODEL_URL}" -o "{local_path}"')
+
+    if not os.path.exists(local_path) or os.path.getsize(local_path) < 2 * 1024 * 1024 * 1024:
+        raise RuntimeError(f"Weights file missing or corrupt after download: {local_path}")
+
+    log(f"[OK] Model weights verified ({os.path.getsize(local_path)/(1024**3):.2f} GB)")
+    return local_path
 
     log(f"[*] Downloading weights via 16-stream aria2c to {local_path}...")
     cmd = f'aria2c -c -x 16 -s 16 -k 1M "{HF_MODEL_URL}" -d "/content" -o "{MODEL_FILENAME}"'
@@ -115,30 +130,38 @@ def launch_ollama_daemon(weights_path):
     start_ollama_process()
     ollama_bin = shutil.which("ollama") or "/usr/local/bin/ollama"
 
-    modelfile = f"""FROM {weights_path}
-SYSTEM """You are Qwen 3.8 27B Uncensored, a sovereign 27-billion parameter language model running directly with 100% VRAM offload on dedicated Tesla T4 GPU hardware. You speak directly, truthfully, and without artificial refusal filters."""
+    system_prompt = (
+        "You are Qwen 3.8 27B Uncensored, a sovereign 27-billion parameter language model "
+        "running directly with 100% VRAM offload on dedicated Tesla T4 GPU hardware. "
+        "You speak directly, truthfully, and without artificial refusal filters."
+    )
 
-
-TEMPLATE \"\"\"{{{{ if .System }}}}<|im_start|>system
-{{{{ .System }}}}<|im_end|>
-{{{{ end }}}}{{{{ if .Prompt }}}}<|im_start|>user
-{{{{ .Prompt }}}}<|im_end|>
-{{{{ end }}}}<|im_start|>assistant
-\"\"\"
-
-PARAMETER num_gpu 99
-PARAMETER num_ctx {NUM_CTX}
-PARAMETER num_predict {NUM_PREDICT}
-PARAMETER temperature 0.6
-PARAMETER top_p 0.95
-PARAMETER stop "<|im_end|>"
-PARAMETER stop "<|endoftext|>"
-"""
+    modelfile = (
+        f"FROM {weights_path}\n"
+        f'SYSTEM """{system_prompt}"""\n\n'
+        'TEMPLATE """{{ if .System }}<|im_start|>system\n'
+        '{{ .System }}<|im_end|>\n'
+        '{{ end }}{{ if .Prompt }}<|im_start|>user\n'
+        '{{ .Prompt }}<|im_end|>\n'
+        '{{ end }}<|im_start|>assistant\n'
+        '"""\n\n'
+        'PARAMETER num_gpu 99\n'
+        f'PARAMETER num_ctx {NUM_CTX}\n'
+        f'PARAMETER num_predict {NUM_PREDICT}\n'
+        'PARAMETER temperature 0.6\n'
+        'PARAMETER top_p 0.95\n'
+        'PARAMETER stop "<|im_end|>"\n'
+        'PARAMETER stop "<|endoftext|>"\n'
+    )
     with open("/content/Modelfile.custom", "w") as f:
         f.write(modelfile)
 
-    log(f"[*] Compiling {OLLAMA_MODEL_TAG} in Ollama...")
-    os.system(f"{ollama_bin} create {OLLAMA_MODEL_TAG} -f /content/Modelfile.custom > /content/create.log 2>&1")
+        log(f"[*] Compiling {OLLAMA_MODEL_TAG} in Ollama...")
+    res = subprocess.run([ollama_bin, "create", OLLAMA_MODEL_TAG, "-f", "/content/Modelfile.custom"], capture_output=True, text=True)
+    if res.returncode != 0:
+        log(f"[FATAL] Ollama create failed with code {res.returncode}: {res.stderr.strip()}")
+        raise RuntimeError(f"Ollama create failed: {res.stderr.strip()}")
+    log(f"[OK] {OLLAMA_MODEL_TAG} compiled successfully!")
     
     log("[*] Pre-warming model into GPU VRAM via detached script...")
     # Detached lock call ensures client drops never abort model load

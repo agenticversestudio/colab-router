@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Square, Sliders, Paperclip, X } from 'lucide-react';
 import { useChatStore } from '../../store/useChatStore';
+import { useTelemetryStore } from '../../store/useTelemetryStore';
+import { useProviderConfig, toProviderId } from '../../store/useProviderStore';
 
 export const ChatDock: React.FC = () => {
   const [input, setInput] = useState('');
@@ -10,6 +12,13 @@ export const ChatDock: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { isStreaming, sendMessage, stopGeneration, temperature, setTemperature } = useChatStore();
+  const gpuStatus = useTelemetryStore(s => s.status);
+  const selectedModel = useChatStore(s => s.selectedModel);
+  const provider = useProviderConfig(toProviderId(selectedModel));
+  // Qwen: real GPU status from /ps. Cloud APIs: "ready" when a key is saved.
+  const engineStatus = provider.kind === 'colab'
+    ? gpuStatus
+    : provider.apiKey ? 'online' : 'connecting';
 
   // Auto-resize textarea based on content
   useEffect(() => {
@@ -155,12 +164,22 @@ export const ChatDock: React.FC = () => {
         {/* Micro-footer Studio Telemetry */}
         <div className="mt-1.5 flex items-center justify-between px-2 text-[10px] text-slate-500 font-mono">
           <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Tesla T4 Online (16GB VRAM)</span>
+            <span className={`flex items-center gap-1.5 ${
+              engineStatus === 'online' ? 'text-emerald-400' : engineStatus === 'connecting' ? 'text-amber-400' : 'text-rose-400'
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                engineStatus === 'online' ? 'bg-emerald-400 animate-pulse' : engineStatus === 'connecting' ? 'bg-amber-400' : 'bg-rose-500'
+              }`} />
+              <span>{
+                provider.kind !== 'colab'
+                  ? (provider.apiKey ? 'Cloud API ready' : 'API key missing: open Models')
+                  : engineStatus === 'online' ? 'Tesla T4 Online (16GB VRAM)'
+                  : engineStatus === 'connecting' ? 'Engine loading / checking...'
+                  : 'GPU Offline: start Colab session'
+              }</span>
             </span>
             <span>•</span>
-            <span className="text-slate-400">Qwen 3.8 27B Uncensored</span>
+            <span className="text-slate-400">{provider.shortLabel}</span>
           </div>
           <span className="hidden sm:inline text-slate-500">100% Client-Side Privacy</span>
         </div>
